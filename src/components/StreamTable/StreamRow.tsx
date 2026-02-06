@@ -16,7 +16,7 @@ import { StatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
 import { CompactSelect, type CompactSelectOption } from '../ui/compact-select';
-import { STREAM_TABLE_COL_GRID } from './StreamTableHeader';
+import { STREAM_TABLE_COL_GRID, ACTIONS_COLUMN_WIDTH } from './StreamTableHeader';
 
 /** Helper: Check if a level value differs from snapshot (for staged highlighting) */
 function isLevelValueStaged(
@@ -101,8 +101,8 @@ function ManualBidAskInputs({
   };
 
   return (
-    <div className="flex items-center gap-4" role="group" aria-label="Manual price source">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Manual price source">
+      <div className="flex items-center gap-1.5">
         <label className="text-[10px] font-medium text-green-400 uppercase tracking-wider shrink-0">
           Manual Bid
         </label>
@@ -125,7 +125,7 @@ function ManualBidAskInputs({
           aria-label="Manual bid value"
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <label className="text-[10px] font-medium text-red-400 uppercase tracking-wider shrink-0">
           Manual Ask
         </label>
@@ -186,8 +186,8 @@ function LiveBidAskDisplay({
   const effectiveAskTimestamp = askTimestamp || new Date().toISOString();
   
   return (
-    <div className="flex items-center gap-4" role="group" aria-label="Live price source">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Live price source">
+      <div className="flex items-center gap-1.5">
         <label className="text-[10px] font-medium text-live-bid uppercase tracking-wider shrink-0">
           Live Bid
         </label>
@@ -203,7 +203,7 @@ function LiveBidAskDisplay({
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <label className="text-[10px] font-medium text-live-ask uppercase tracking-wider shrink-0">
           Live Ask
         </label>
@@ -269,7 +269,7 @@ function BatchQtyHeader({
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            'flex items-center gap-1 w-full text-left py-1 px-2 text-muted-foreground font-medium',
+            'flex items-center gap-0.5 w-full text-left py-1 px-1 text-muted-foreground font-medium text-[11px]',
             'hover:text-foreground hover:bg-muted/50 rounded transition-colors',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
           )}
@@ -340,7 +340,7 @@ function BatchQtyHeader({
 const SPREAD_INCREMENT = 0.1;
 
 /** Default spread values (bps) for Reset to Default: L1=0, L2=1, L3=4, L4=5, L5=6 */
-const DEFAULT_SPREADS_BPS = [0, 1, 4, 5, 6];
+const DEFAULT_SPREADS_BPS = [0, 1, 2, 3, 4];
 
 function roundBps(n: number): number {
   return Math.round(n * 1000) / 1000;
@@ -464,7 +464,7 @@ function BatchSpreadHeader({
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            'flex items-center gap-1 w-full text-left py-1 px-2 text-muted-foreground font-medium',
+            'flex items-center gap-0.5 w-full text-left py-1 px-1 text-muted-foreground font-medium text-[11px]',
             'hover:text-foreground hover:bg-muted/50 rounded transition-colors',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
           )}
@@ -595,7 +595,7 @@ function LevelCellInput({
       onKeyDown={onKeyDown}
       onFocus={(e) => e.target.select()}
       className={cn(
-        'w-full min-w-0 h-6 px-1.5 text-[11px] tabular-nums rounded border border-transparent bg-background/50',
+        'w-full min-w-0 h-6 px-1 text-[11px] tabular-nums rounded border border-transparent bg-background/50',
         'focus:border-border focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-0',
         'hover:bg-muted/50 transition-colors',
         side === 'bid' && 'focus:border-green-500/50 focus:ring-green-500/30',
@@ -762,7 +762,7 @@ function ExpandedLevelsTable({
   return (
     <div
       className={cn(
-        'px-4 pb-3 pt-2',
+        'px-2 pb-2 pt-2',
         'bg-muted/20'
       )}
       onClick={(e) => e.stopPropagation()}
@@ -819,8 +819,8 @@ function ExpandedLevelsTable({
         </div>
       )}
       {/* Manual Bid/Ask or Live Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
-      <div className="flex items-center justify-between gap-4 mb-2 py-2" role="group" aria-label="Price and volume settings">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-2 mb-2 py-2 flex-wrap" role="group" aria-label="Price and volume settings">
+        <div className="flex items-center gap-2 flex-wrap">
           {!isUdi && stream.selectedPriceSource === 'manual' && (
             <ManualBidAskInputs
               stream={stream}
@@ -841,7 +841,7 @@ function ExpandedLevelsTable({
         <div
           role="tablist"
           aria-label="Volume unit"
-          className="segmented-control h-6"
+          className="segmented-control h-6 shrink-0"
         >
           <button
             type="button"
@@ -891,101 +891,103 @@ function ExpandedLevelsTable({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Bid Levels - columns: Qty/Notional, Spread, Yield */}
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
-            <span className="text-[10px] font-medium text-green-400 uppercase tracking-wider">
-              Bid Levels ({bidActiveCount})
-            </span>
-            <div className="flex items-center gap-1.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
+      {/* Tables container - side by side with minimal gap, horizontal scroll when needed */}
+      <div className="overflow-x-auto">
+        <div className="flex gap-2">
+          {/* Bid Levels - columns: Qty/Notional, Spread, Yield */}
+          <div className="flex-1 min-w-[220px]">
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span className="text-[10px] font-medium text-green-400 uppercase tracking-wider whitespace-nowrap">
+                Bid Levels ({bidActiveCount})
+              </span>
+              <div className="flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        launchAllLevels(stream.id, 'bid');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      className="h-5 w-5 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Launch all bid levels</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pauseAllLevels(stream.id, 'bid');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Pause className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Pause all bid levels</TooltipContent>
+                </Tooltip>
+                <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                  <span>Max</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={stream.bid.maxLvls ?? 1}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
                       e.stopPropagation();
-                      launchAllLevels(stream.id, 'bid');
+                      const raw = e.target.value;
+                      const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
+                      updateStreamSet(stream.id, {
+                        bid: { ...stream.bid, maxLvls: v },
+                      });
                     }}
-                    disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                    className="h-5 w-5 text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                  >
-                    {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Launch all bid levels</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      pauseAllLevels(stream.id, 'bid');
+                    onKeyDown={(e) => {
+                      if (/^[0-5]$/.test(e.key)) {
+                        e.target.select();
+                      }
                     }}
-                    disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                    className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  >
-                    {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Pause className="h-3 w-3" />
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      'w-8 h-5 px-0.5 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                      stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
                     )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Pause all bid levels</TooltipContent>
-              </Tooltip>
-              <label className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-                <span>MAX Lvls</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={5}
-                  value={stream.bid.maxLvls ?? 1}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    const raw = e.target.value;
-                    const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-                    updateStreamSet(stream.id, {
-                      bid: { ...stream.bid, maxLvls: v },
-                    });
-                  }}
-                  onKeyDown={(e) => {
-                    if (/^[0-5]$/.test(e.key)) {
-                      e.target.select();
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    'w-10 h-5 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
-                    stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
-                  )}
-                />
-              </label>
+                  />
+                </label>
+              </div>
             </div>
-          </div>
-          <div className="rounded border border-border/50 overflow-hidden">
-            <table className="w-full text-[11px] tabular-nums">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/50">
-                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-12" aria-label="Level control" />
-                  <th className="text-left py-1 px-2 text-muted-foreground font-medium w-8">L</th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium">
-                    <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
-                  </th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium">
-                    <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
-                  </th>
-                  <th className="text-left py-1 px-2 text-muted-foreground font-medium">Yield</th>
-                </tr>
-              </thead>
+            <div className="rounded border border-border/50">
+              <table className="w-full text-[11px] tabular-nums">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/50">
+                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-10 whitespace-nowrap" aria-label="Level control" />
+                    <th className="text-left py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
+                    <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
+                      <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
+                    </th>
+                    <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
+                      <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
+                    </th>
+                    <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
+                  </tr>
+                </thead>
               <tbody>
                 {stream.bid.spreadMatrix.map((level, i) => (
                   <LevelRow
@@ -1010,15 +1012,15 @@ function ExpandedLevelsTable({
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
 
-        {/* Ask Levels - columns: Yield, Spread, Qty (mirrored) */}
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
-            <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider">
+          {/* Ask Levels - columns: Yield, Spread, Qty (mirrored) */}
+          <div className="flex-1 min-w-[220px]">
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider whitespace-nowrap">
               Ask Levels ({askActiveCount})
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1061,8 +1063,8 @@ function ExpandedLevelsTable({
                 </TooltipTrigger>
                 <TooltipContent>Pause all ask levels</TooltipContent>
               </Tooltip>
-              <label className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-                <span>MAX Lvls</span>
+              <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                <span>Max</span>
                 <input
                   type="number"
                   min={0}
@@ -1084,25 +1086,25 @@ function ExpandedLevelsTable({
                   }}
                   onClick={(e) => e.stopPropagation()}
                   className={cn(
-                    'w-10 h-5 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                    'w-8 h-5 px-0.5 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
                     stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
                   )}
                 />
               </label>
             </div>
           </div>
-          <div className="rounded border border-border/50 overflow-hidden">
+          <div className="rounded border border-border/50">
             <table className="w-full text-[11px] tabular-nums">
               <thead>
                 <tr className="bg-muted/50 border-b border-border/50">
-                  <th className="text-left py-1 px-2 text-muted-foreground font-medium">Yield</th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium">
+                  <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
+                  <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                     <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
                   </th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium">
+                  <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                     <BatchQtyHeader volumeLabel={volumeLabel} side="ask" stream={stream} onBatchApply={batchUpdateQty} />
                   </th>
-                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-12" aria-label="Level control" />
+                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-10" aria-label="Level control" />
                 </tr>
               </thead>
               <tbody>
@@ -1130,6 +1132,7 @@ function ExpandedLevelsTable({
             </table>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1262,8 +1265,9 @@ function LevelRow({
     setYieldInput(formatNumber(baseValue + level.deltaBps / 100));
   }, [level.quantity, level.deltaBps, baseValue, side, formatNumber]);
 
+  // Control cell - constant element sizes
   const controlCell = (
-    <td className="py-0.5 px-1 w-12">
+    <td className="py-0.5 px-1 w-10">
       <div className="flex items-center justify-center gap-0.5">
         {isLevelLoading ? (
           <Loader2 className="h-2 w-2 animate-spin shrink-0 text-muted-foreground" aria-hidden />
@@ -1314,8 +1318,8 @@ function LevelRow({
     return (
       <tr className="border-b border-border/30 last:border-0 hover:bg-muted/30">
         {controlPosition === 'left' && controlCell}
-        <td className="py-0.5 px-2 text-muted-foreground tabular-nums">L{level.levelNumber}</td>
-        <td className="py-0.5 px-2">
+        <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px]">L{level.levelNumber}</td>
+        <td className="py-0.5 px-1">
           <LevelCellInput
             value={qtyInput}
             onChange={(v) => setQtyInput(v)}
@@ -1325,7 +1329,7 @@ function LevelRow({
             isStaged={isQtyStaged}
           />
         </td>
-        <td className="py-0.5 px-2">
+        <td className="py-0.5 px-1">
           <LevelCellInput
             value={spreadInput}
             onChange={handleSpreadChange}
@@ -1335,7 +1339,7 @@ function LevelRow({
             isStaged={isSpreadStaged}
           />
         </td>
-        <td className={cn('py-0.5 px-2 tabular-nums', side === 'bid' && 'text-green-400/90')}>
+        <td className={cn('py-0.5 px-1 tabular-nums', side === 'bid' && 'text-green-400/90')}>
           <LevelCellInput
             value={yieldInput}
             onChange={handleYieldChange}
@@ -1350,10 +1354,11 @@ function LevelRow({
     );
   }
 
+  // ASK side - with sticky control cell on right
   return (
     <tr className="border-b border-border/30 last:border-0 hover:bg-muted/30">
       {controlPosition === 'left' && controlCell}
-      <td className={cn('py-0.5 px-2 tabular-nums', side === 'ask' && 'text-red-400/90')}>
+      <td className={cn('py-0.5 px-1 tabular-nums', side === 'ask' && 'text-red-400/90')}>
         <LevelCellInput
           value={yieldInput}
           onChange={handleYieldChange}
@@ -1363,7 +1368,7 @@ function LevelRow({
           isStaged={isYieldStaged}
         />
       </td>
-      <td className="py-0.5 px-2">
+      <td className="py-0.5 px-1">
         <LevelCellInput
           value={spreadInput}
           onChange={handleSpreadChange}
@@ -1373,7 +1378,7 @@ function LevelRow({
           isStaged={isSpreadStaged}
         />
       </td>
-      <td className="py-0.5 px-2">
+      <td className="py-0.5 px-1">
         <LevelCellInput
           value={qtyInput}
           onChange={(v) => setQtyInput(v)}
@@ -1577,7 +1582,7 @@ export function StreamRow({ stream }: StreamRowProps) {
       {/* Main Row - click toggles levels editor and selects; actions use stopPropagation */}
       <div
         className={cn(
-          `grid ${STREAM_TABLE_COL_GRID} gap-2 px-4 py-2 items-center cursor-pointer text-sm`,
+          'flex items-center cursor-pointer text-sm group',
           'table-row-hover'
         )}
         onClick={() => {
@@ -1585,187 +1590,205 @@ export function StreamRow({ stream }: StreamRowProps) {
           selectStream(stream.id === selectedStreamId ? null : stream.id);
         }}
       >
-        {/* Expand/Status */}
-        <div className="flex items-center gap-1 min-w-0">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpanded(stream.id);
-            }}
-            className="h-5 w-5"
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </Button>
-          <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} isLoading={isStreamProcessing} />
-          {stream.hasStagingChanges && (
-            <Badge
-              variant="staging-indicator"
-              title="Staged changes (pending apply)"
-              aria-label="Staged changes (pending apply)"
+        {/* Scrollable columns */}
+        <div className={cn('grid gap-2 px-4 py-2 items-center flex-1 min-w-0', STREAM_TABLE_COL_GRID)}>
+          {/* Expand/Status */}
+          <div className="flex items-center gap-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleExpanded(stream.id);
+              }}
+              className="h-5 w-5"
             >
-              S
-            </Badge>
-          )}
-        </div>
-
-        {/* Name */}
-        <div className="truncate font-medium" title={stream.securityName}>
-          {stream.securityAlias}
-        </div>
-
-        {/* Price Source / QF - show "-" when unconfigured (no QF assigned), otherwise CompactSelect */}
-        <div onClick={(e) => e.stopPropagation()}>
-          <CompactSelect
-            value={stream.state === 'unconfigured' ? '' : (stream.selectedPriceSource || 'manual')}
-            options={priceSourceOptions}
-            onChange={handlePriceSourceChange}
-            placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
-            className={cn(
-              'w-20',
-              isPriceSourceStaged && 'text-blue-400 bg-blue-500/10'
+              {isExpanded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </Button>
+            <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} isLoading={isStreamProcessing} />
+            {stream.hasStagingChanges && (
+              <Badge
+                variant="staging-indicator"
+                title="Staged changes (pending apply)"
+                aria-label="Staged changes (pending apply)"
+              >
+                S
+              </Badge>
             )}
-          />
+          </div>
+
+          {/* Name */}
+          <div className="truncate font-medium" title={stream.securityName}>
+            {stream.securityAlias}
+          </div>
+
+          {/* Price Source / QF - show "-" when unconfigured (no QF assigned), otherwise CompactSelect */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <CompactSelect
+              value={stream.state === 'unconfigured' ? '' : (stream.selectedPriceSource || 'manual')}
+              options={priceSourceOptions}
+              onChange={handlePriceSourceChange}
+              placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
+              className={cn(
+                'w-20',
+                isPriceSourceStaged && 'text-blue-400 bg-blue-500/10'
+              )}
+            />
+          </div>
+
+          {/* BID LVL - count of active bid levels */}
+          {/* Show "-" when unconfigured or no active levels */}
+          <span className={cn(
+            'text-center tabular-nums text-xs',
+            stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' : (bidActiveCount > 0 ? bidActiveCount : '-')}
+          </span>
+
+          {/* BSIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0 
+              ? (isBidL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+              : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              ((stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
+                ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
+                : '-')}
+          </span>
+
+          {/* BSP - spread from best/innermost active bid level */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            bidBestLevel?.deltaBps != null
+              ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+              : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
+          </span>
+
+          {/* BID */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (bidValue != null && bidValue !== 0 ? 'text-green-400' : 'text-muted-foreground')
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-')}
+          </span>
+
+          {/* Live Bid - softer tone for external market data */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
+          </span>
+
+          {/* Live Ask - softer tone for external market data */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
+          </span>
+
+          {/* ASK */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (askValue != null && askValue !== 0 ? 'text-red-400' : 'text-muted-foreground')
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (askValue != null && askValue !== 0 ? formatNumber(askYield) : '-')}
+          </span>
+
+          {/* ASP - spread from best/innermost active ask level */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            askBestLevel?.deltaBps != null
+              ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+              : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              (askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-')}
+          </span>
+
+          {/* ASIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
+          {/* Show "-" when unconfigured */}
+          <span className={cn(
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+            stream.state === 'unconfigured' ? 'text-muted-foreground' :
+            (stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
+              ? (isAskL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+              : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' :
+              ((stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
+                ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
+                : '-')}
+          </span>
+
+          {/* ALVL - count of active ask levels */}
+          {/* Show "-" when unconfigured or no active levels */}
+          <span className={cn(
+            'text-center tabular-nums text-xs',
+            stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' : (askActiveCount > 0 ? askActiveCount : '-')}
+          </span>
+
+          {/* UNIT - volume mode */}
+          {/* Show "-" when unconfigured, blue highlight when staged */}
+          <span className={cn(
+            'text-center text-xs',
+            stream.state === 'unconfigured'
+              ? 'text-muted-foreground'
+              : stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode
+                ? 'text-blue-400 font-medium'
+                : 'text-muted-foreground'
+          )}>
+            {stream.state === 'unconfigured' ? '-' : (stream.priceMode === 'notional' ? 'MXN' : 'QTY')}
+          </span>
         </div>
 
-        {/* BID LVL - count of active bid levels */}
-        {/* Show "-" when unconfigured or no active levels */}
-        <span className={cn(
-          'text-center tabular-nums text-xs',
-          stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' : (bidActiveCount > 0 ? bidActiveCount : '-')}
-        </span>
-
-        {/* BSIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0 
-            ? (isBidL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
-            : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            ((stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
-              ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
-              : '-')}
-        </span>
-
-        {/* BSP - spread from best/innermost active bid level */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          bidBestLevel?.deltaBps != null
-            ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
-            : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
-        </span>
-
-        {/* BID */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (bidValue != null && bidValue !== 0 ? 'text-green-400' : 'text-muted-foreground')
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-')}
-        </span>
-
-        {/* Live Bid - softer tone for external market data */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
-        </span>
-
-        {/* Live Ask - softer tone for external market data */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
-        </span>
-
-        {/* ASK */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (askValue != null && askValue !== 0 ? 'text-red-400' : 'text-muted-foreground')
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (askValue != null && askValue !== 0 ? formatNumber(askYield) : '-')}
-        </span>
-
-        {/* ASP - spread from best/innermost active ask level */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          askBestLevel?.deltaBps != null
-            ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
-            : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            (askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-')}
-        </span>
-
-        {/* ASIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
-        {/* Show "-" when unconfigured */}
-        <span className={cn(
-          'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-          stream.state === 'unconfigured' ? 'text-muted-foreground' :
-          (stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
-            ? (isAskL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
-            : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' :
-            ((stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
-              ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
-              : '-')}
-        </span>
-
-        {/* ALVL - count of active ask levels */}
-        {/* Show "-" when unconfigured or no active levels */}
-        <span className={cn(
-          'text-center tabular-nums text-xs',
-          stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' : (askActiveCount > 0 ? askActiveCount : '-')}
-        </span>
-
-        {/* UNIT - volume mode */}
-        {/* Show "-" when unconfigured, blue highlight when staged */}
-        <span className={cn(
-          'text-center text-xs',
-          stream.state === 'unconfigured'
-            ? 'text-muted-foreground'
-            : stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode
-              ? 'text-blue-400 font-medium'
-              : 'text-muted-foreground'
-        )}>
-          {stream.state === 'unconfigured' ? '-' : (stream.priceMode === 'notional' ? 'MXN' : 'QTY')}
-        </span>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-1.5 min-w-0 overflow-visible" onClick={(e) => e.stopPropagation()}>
+        {/* Sticky Actions column */}
+        <div 
+          className={cn(
+            'sticky right-0 z-10 px-2 py-2 flex items-center justify-end gap-1 overflow-visible',
+            'border-l border-border/30',
+            'shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.3)]',
+            'group-hover:bg-[hsl(var(--muted)/0.5)]',
+            ACTIONS_COLUMN_WIDTH,
+            // Match row background state
+            isExpanded ? 'bg-[hsl(var(--muted)/0.25)]' :
+            stream.state === 'staging' ? 'bg-[hsl(var(--status-staging)/0.1)]' :
+            stream.state === 'paused' ? 'bg-[hsl(var(--status-paused)/0.1)]' :
+            stream.state === 'halted' ? 'bg-[hsl(var(--status-halted)/0.1)]' :
+            'bg-background'
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
           {stream.hasStagingChanges && !isExpanded && (
             <div className="flex items-center gap-1.5 shrink-0">
               {/* Cancel Edits button - always show when there are staging changes */}

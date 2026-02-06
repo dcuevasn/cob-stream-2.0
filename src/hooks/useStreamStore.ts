@@ -1193,8 +1193,8 @@ export const useStreamStore = create<StreamStore>()(
       resetSpreadsForType: (side, securityType) => {
         const targetStreams = get().getStreamsForBatchSpread(securityType);
         const targetIds = new Set(targetStreams.map((s) => s.id));
-        // Default spreads: L1=0, L2=1, L3=4, L4=5, L5=6 bps (negative for ask)
-        const defaultSpreads = [0, 1, 4, 5, 6];
+        // Default spreads: L1=0, L2=1, L3=2, L4=3, L5=4 bps (negative for ask)
+        const defaultSpreads = [0, 1, 2, 3, 4];
         
         set((state) => ({
           streamSets: state.streamSets.map((ss) => {

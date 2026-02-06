@@ -12,8 +12,12 @@ import {
 } from '../ui/dropdown-menu';
 import type { SecurityType, StreamSet } from '../../types/streamSet';
 
+/** Grid columns for main scrollable content (excludes sticky Actions column) */
 export const STREAM_TABLE_COL_GRID =
-  'grid-cols-[40px_100px_90px_40px_55px_50px_55px_55px_55px_55px_50px_55px_40px_45px_140px]';
+  'grid-cols-[40px_100px_90px_40px_55px_50px_55px_55px_55px_55px_50px_55px_40px_45px]';
+
+/** Width of the sticky actions column */
+export const ACTIONS_COLUMN_WIDTH = 'w-[60px]';
 
 /** Spread adjustment increment (bps) */
 const SPREAD_INCREMENT = 0.1;
@@ -259,30 +263,39 @@ interface StreamTableHeaderProps {
 
 export function StreamTableHeader({ securityType }: StreamTableHeaderProps) {
   return (
-    <div className={cn('grid gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border/50 bg-muted/30', STREAM_TABLE_COL_GRID)}>
-      <div className="text-center"></div>
-      <div>Name</div>
-      <div className="min-w-0">
-        <PriceSourceBatchPopover securityType={securityType} />
+    <div className="flex border-b border-border/50 bg-muted/30">
+      {/* Scrollable columns */}
+      <div className={cn('grid gap-2 px-4 py-2 text-xs font-medium text-muted-foreground flex-1 min-w-0', STREAM_TABLE_COL_GRID)}>
+        <div className="text-center"></div>
+        <div>Name</div>
+        <div className="min-w-0">
+          <PriceSourceBatchPopover securityType={securityType} />
+        </div>
+        <span className="text-center">BLVL</span>
+        <span className="text-right">BSIZ</span>
+        <div className="text-right">
+          <BatchSpreadColumnPopover side="bid" securityType={securityType} />
+        </div>
+        <span className="text-right text-green-400">BID</span>
+        <span className="text-center text-muted-foreground">Live Bid</span>
+        <span className="text-center text-muted-foreground">Live Ask</span>
+        <span className="text-right text-red-400">ASK</span>
+        <div className="text-right">
+          <BatchSpreadColumnPopover side="ask" securityType={securityType} />
+        </div>
+        <span className="text-right">ASIZ</span>
+        <span className="text-center">ALVL</span>
+        <div className="text-center min-w-0">
+          <UnitBatchPopover securityType={securityType} />
+        </div>
       </div>
-      <span className="text-center">BLVL</span>
-      <span className="text-right">BSIZ</span>
-      <div className="text-right">
-        <BatchSpreadColumnPopover side="bid" securityType={securityType} />
-      </div>
-      <span className="text-right text-green-400">BID</span>
-      <span className="text-center text-muted-foreground">Live Bid</span>
-      <span className="text-center text-muted-foreground">Live Ask</span>
-      <span className="text-right text-red-400">ASK</span>
-      <div className="text-right">
-        <BatchSpreadColumnPopover side="ask" securityType={securityType} />
-      </div>
-      <span className="text-right">ASIZ</span>
-      <span className="text-center">ALVL</span>
-      <div className="text-center min-w-0">
-        <UnitBatchPopover securityType={securityType} />
-      </div>
-      <div className="text-center">Actions</div>
+      {/* Sticky Actions column - empty header */}
+      <div className={cn(
+        'sticky right-0 z-20 px-2 py-2',
+        'bg-muted/30 border-l border-border/30',
+        'shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.3)]',
+        ACTIONS_COLUMN_WIDTH
+      )} />
     </div>
   );
 }

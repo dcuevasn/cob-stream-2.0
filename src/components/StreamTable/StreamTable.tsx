@@ -153,11 +153,13 @@ export function StreamTable({ securityType }: StreamTableProps) {
                     {label} ({typeStreams.length})
                   </span>
                 </AccordionTrigger>
-                <AccordionContent className="px-0 pb-0 pt-0">
-                  <StreamTableHeader securityType={type} />
-                  {typeStreams.map((stream) => (
-                    <StreamRow key={stream.id} stream={stream} />
-                  ))}
+                <AccordionContent className="px-0 pb-0 pt-0 overflow-x-auto">
+                  <div className="min-w-[1000px]">
+                    <StreamTableHeader securityType={type} />
+                    {typeStreams.map((stream) => (
+                      <StreamRow key={stream.id} stream={stream} />
+                    ))}
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             );
@@ -169,11 +171,13 @@ export function StreamTable({ securityType }: StreamTableProps) {
 
   return (
     <div className="flex-1 min-h-0 overflow-auto">
-      <div className="pt-2">
-        <StreamTableHeader />
-        {streams.map((stream) => (
-          <StreamRow key={stream.id} stream={stream} />
-        ))}
+      <div className="pt-2 overflow-x-auto">
+        <div className="min-w-[1000px]">
+          <StreamTableHeader />
+          {streams.map((stream) => (
+            <StreamRow key={stream.id} stream={stream} />
+          ))}
+        </div>
       </div>
     </div>
   );
