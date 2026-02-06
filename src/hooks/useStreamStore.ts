@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed } from '../types/streamSet';
+import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem } from '../types/streamSet';
 import { generateInitialStreamSets, generateRandomDemoData, generateStreamQuoteFeeds, generateAdditiveDemoStreams, type DemoStreamType } from '../mocks/mockData';
 import { simulateLaunch, simulateStopStream, validateStreamSet } from '../mocks/mockValidations';
 import { stagingConfigEquals } from '../lib/utils';
@@ -20,6 +20,9 @@ interface StreamStore {
   preferences: UserPreferences;
   /** Accordion open sections in All view (SecurityType values). Persists across view changes. */
   accordionOpenSections: string[];
+  
+  /** Launch progress state for batch launch operations */
+  launchProgress: LaunchProgressState | null;
 
   // Actions
   setStreamSets: (streamSets: StreamSet[]) => void;
@@ -48,8 +51,8 @@ interface StreamStore {
   configureStream: (id: string, config: Partial<StreamSet>) => void;
 
   // Batch operations
-  batchUpdatePriceSource: (selectedPriceSource: string) => void;
-  batchUpdatePriceMode: (priceMode: 'quantity' | 'notional') => void;
+  batchUpdatePriceSource: (selectedPriceSource: string, securityType?: SecurityType) => void;
+  batchUpdatePriceMode: (priceMode: 'quantity' | 'notional', securityType?: SecurityType) => void;
   batchUpdateMaxLvls: (bidMaxLvls: number, askMaxLvls: number) => void;
 
   // Staging revert
@@ -73,6 +76,10 @@ interface StreamStore {
   generateDemoData: (type?: DemoStreamType) => void;
   resetState: () => void;
 
+  // Launch progress actions
+  launchAllWithProgress: (variant: 'all' | 'bid' | 'ask', securityType?: SecurityType) => Promise<void>;
+  dismissLaunchProgress: () => void;
+  
   // Computed
   getFilteredStreamSets: () => StreamSet[];
   getStreamsByType: (type: SecurityType) => StreamSet[];
@@ -172,6 +179,7 @@ export const useStreamStore = create<StreamStore>()(
       missingPriceSourceStreamIds: new Set<string>(),
       preferences: defaultPreferences,
       accordionOpenSections: ['M Bono', 'UDI Bono', 'Cetes', 'Corporate MXN', 'Corporate UDI'],
+      launchProgress: null,
 
       setStreamSets: (streamSets) => set({ streamSets }),
 
@@ -843,24 +851,46 @@ export const useStreamStore = create<StreamStore>()(
         });
       },
 
-      /** Batch update Price Source for all streams in current view. 
+      /** Batch update Price Source for all streams in current view/section. 
        * Uses atomic state update to ensure consistency.
-       * For QF selections: applies selected QF if available, otherwise falls back deterministically. */
-      batchUpdatePriceSource: (selectedPriceSource) => {
+       * When securityType is provided (in All view sections), only updates streams of that type.
+       * IMPORTANT: Always assigns the EXACT selected price source to ALL streams - no fallback logic.
+       * This ensures consistent batch updates where all streams get the same selection.
+       * If a stream doesn't have the selected QF in quoteFeeds, it's added to ensure validity. */
+      batchUpdatePriceSource: (selectedPriceSource, securityType) => {
         const { getFilteredStreamSets } = get();
-        const streams = getFilteredStreamSets();
+        let streams = getFilteredStreamSets();
+        
+        // When securityType is provided (in All view sections), filter to just that type
+        if (securityType) {
+          streams = streams.filter((s) => s.securityType === securityType);
+        }
+        
         const isManual = selectedPriceSource === 'manual';
         const timestamp = new Date().toISOString();
-
-        // Helper: Find fallback feed for a stream when selected QF is not available
-        const findFallbackFeed = (stream: StreamSet): StreamQuoteFeed | null => {
-          if (!stream.quoteFeeds || stream.quoteFeeds.length === 0) return null;
-          // Try QF-1 first (most common)
-          const qf1 = stream.quoteFeeds.find((f) => f.feedId === 'QF-1');
-          if (qf1) return qf1;
-          // Otherwise use first available feed
-          return stream.quoteFeeds[0];
-        };
+        
+        // For QF selections, find a reference feed from any stream that has it
+        // This is used to populate quoteFeeds for streams that don't have this QF
+        let referenceFeed: StreamQuoteFeed | null = null;
+        if (!isManual) {
+          for (const s of streams) {
+            const found = s.quoteFeeds?.find((f) => f.feedId === selectedPriceSource);
+            if (found) {
+              referenceFeed = found;
+              break;
+            }
+          }
+          // If not found in filtered streams, check all streams
+          if (!referenceFeed) {
+            for (const s of get().streamSets) {
+              const found = s.quoteFeeds?.find((f) => f.feedId === selectedPriceSource);
+              if (found) {
+                referenceFeed = found;
+                break;
+              }
+            }
+          }
+        }
 
         // Single atomic state update
         set((state) => {
@@ -871,9 +901,9 @@ export const useStreamStore = create<StreamStore>()(
 
             if (isManual) {
               // Manual: preserve current displayed values
-              const selectedFeed = stream.quoteFeeds?.find((f) => f.feedId === stream.selectedPriceSource);
-              const currentBid = selectedFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
-              const currentAsk = selectedFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
+              const currentFeed = stream.quoteFeeds?.find((f) => f.feedId === stream.selectedPriceSource);
+              const currentBid = currentFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
+              const currentAsk = currentFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
               
               return {
                 ...stream,
@@ -890,45 +920,40 @@ export const useStreamStore = create<StreamStore>()(
                 hasStagingChanges: true,
               };
             } else {
-              // QF selection: try selected feed, fallback if not available
+              // QF selection: Find the selected feed in this stream's quoteFeeds
               let feed = stream.quoteFeeds?.find((f) => f.feedId === selectedPriceSource);
+              let updatedQuoteFeeds = stream.quoteFeeds;
               
-              if (!feed) {
-                // Fallback: try QF-1, then first available, then manual
-                feed = findFallbackFeed(stream);
-                if (!feed) {
-                  // No feeds available, fall back to manual
-                  const selectedFeed = stream.quoteFeeds?.find((f) => f.feedId === stream.selectedPriceSource);
-                  const currentBid = selectedFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
-                  const currentAsk = selectedFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
-                  
-                  return {
-                    ...stream,
-                    selectedPriceSource: 'manual',
-                    quoteFeedId: undefined,
-                    quoteFeedName: undefined,
-                    referencePrice: {
-                      ...stream.referencePrice,
-                      source: 'manual',
-                      value: stream.referencePrice.value || currentBid,
-                      manualBid: currentBid,
-                      manualAsk: currentAsk,
-                    },
-                    hasStagingChanges: true,
-                  };
-                }
+              // If stream doesn't have this QF, add it from reference (ensures isPriceSourceValid passes)
+              if (!feed && referenceFeed) {
+                // Clone the reference feed for this stream
+                feed = { ...referenceFeed };
+                updatedQuoteFeeds = [...(stream.quoteFeeds || []), feed];
+              } else if (!feed) {
+                // No reference available - create a placeholder feed entry
+                // This ensures the QF is recognized as valid even without live data
+                feed = {
+                  feedId: selectedPriceSource,
+                  feedName: selectedPriceSource,
+                  bid: stream.referencePrice.value || 0,
+                  ask: stream.referencePrice.value || 0,
+                };
+                updatedQuoteFeeds = [...(stream.quoteFeeds || []), feed];
               }
-
-              // Apply QF (either selected or fallback)
+              
+              const bidValue = feed.bid ?? stream.referencePrice.value;
+              
               return {
                 ...stream,
-                selectedPriceSource: feed.feedId,
-                quoteFeedId: feed.feedId,
-                quoteFeedName: feed.feedName,
+                // Always use the user's exact selection
+                selectedPriceSource: selectedPriceSource,
+                quoteFeedId: selectedPriceSource,
+                quoteFeedName: feed.feedName ?? selectedPriceSource,
+                quoteFeeds: updatedQuoteFeeds,
                 referencePrice: {
                   ...stream.referencePrice,
                   source: 'live',
-                  value: feed.bid,
+                  value: bidValue,
                   timestamp,
                 },
                 hasStagingChanges: true,
@@ -940,10 +965,17 @@ export const useStreamStore = create<StreamStore>()(
         });
       },
 
-      /** Batch update Price Mode (Qty ↔ Notional) for all streams in current view. */
-      batchUpdatePriceMode: (priceMode) => {
+      /** Batch update Price Mode (Qty ↔ Notional) for all streams in current view/section.
+       * When securityType is provided (in All view sections), only updates streams of that type. */
+      batchUpdatePriceMode: (priceMode, securityType) => {
         const { getFilteredStreamSets, updateStreamSet } = get();
-        const streams = getFilteredStreamSets();
+        let streams = getFilteredStreamSets();
+        
+        // When securityType is provided (in All view sections), filter to just that type
+        if (securityType) {
+          streams = streams.filter((s) => s.securityType === securityType);
+        }
+        
         streams.forEach((stream) => {
           updateStreamSet(stream.id, { priceMode });
         });
@@ -1242,6 +1274,208 @@ export const useStreamStore = create<StreamStore>()(
         });
       },
 
+      // Launch progress actions
+      launchAllWithProgress: async (variant, securityType) => {
+        const { getFilteredStreamSets, updateStreamSet } = get();
+        let streams = getFilteredStreamSets();
+        
+        // Filter by security type if provided (for section-specific launches in All view)
+        if (securityType) {
+          streams = streams.filter((s) => s.securityType === securityType);
+        }
+        
+        // Filter to launchable streams
+        const launchableStreams = streams.filter(
+          (ss) => ss.state !== 'cancelled' && ss.state !== 'unconfigured'
+        );
+        
+        if (launchableStreams.length === 0) return;
+        
+        // Initialize progress state with order counts based on maxLvls and variant
+        const progressItems: LaunchProgressItem[] = launchableStreams.map((s) => {
+          const bidMaxLvls = s.bid.maxLvls ?? 1;
+          const askMaxLvls = s.ask.maxLvls ?? 1;
+          // Calculate expected order counts based on launch variant
+          const bidCount = (variant === 'all' || variant === 'bid') ? bidMaxLvls : 0;
+          const askCount = (variant === 'all' || variant === 'ask') ? askMaxLvls : 0;
+          return {
+            streamId: s.id,
+            streamName: s.securityAlias || s.securityName,
+            status: 'pending' as const,
+            bidCount,
+            askCount,
+            securityType: s.securityType,
+          };
+        });
+        
+        set({
+          launchProgress: {
+            isActive: true,
+            items: progressItems,
+            completedCount: 0,
+            totalCount: launchableStreams.length,
+            variant,
+            startTime: Date.now(),
+          },
+          isLoading: true,
+          launchingStreamIds: new Set(launchableStreams.map((s) => s.id)),
+        });
+        
+        // Process streams in small batches (2-3 at a time) for smooth animation
+        const BATCH_SIZE = 2;
+        const STAGGER_DELAY = 150; // ms between starting each stream in batch
+        
+        for (let i = 0; i < launchableStreams.length; i += BATCH_SIZE) {
+          const batch = launchableStreams.slice(i, i + BATCH_SIZE);
+          
+          // Process batch with staggered starts for smoother animation
+          const batchPromises = batch.map(async (stream, batchIndex) => {
+            // Stagger the start of each stream in the batch
+            await new Promise((resolve) => setTimeout(resolve, batchIndex * STAGGER_DELAY));
+            
+            // Update to processing state
+            set((s) => {
+              if (!s.launchProgress) return s;
+              const items = s.launchProgress.items.map((item) =>
+                item.streamId === stream.id
+                  ? { ...item, status: 'processing' as const, startTime: Date.now() }
+                  : item
+              );
+              return { launchProgress: { ...s.launchProgress, items } };
+            });
+            
+            // Validate price source before launching
+            if (!isPriceSourceValid(stream)) {
+              set((s) => {
+                if (!s.launchProgress) return s;
+                const items = s.launchProgress.items.map((item) =>
+                  item.streamId === stream.id
+                    ? { ...item, status: 'error' as const, error: 'Missing price source', endTime: Date.now() }
+                    : item
+                );
+                const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                return { 
+                  launchProgress: { ...s.launchProgress, items, completedCount },
+                  missingPriceSourceStreamIds: new Set(s.missingPriceSourceStreamIds).add(stream.id),
+                };
+              });
+              return;
+            }
+            
+            try {
+              // Simulate launch (add slight delay for animation smoothness)
+              const result = await simulateLaunch(stream);
+              
+              if (result.success) {
+                const snapshot = createStagingSnapshot(stream);
+                const bidMaxLvls = stream.bid.maxLvls ?? 1;
+                const askMaxLvls = stream.ask.maxLvls ?? 1;
+                
+                // Determine which side(s) to activate based on variant
+                let activateBid = variant === 'all' || variant === 'bid';
+                let activateAsk = variant === 'all' || variant === 'ask';
+                
+                const activatedBidMatrix = stream.bid.spreadMatrix.map((l) => ({
+                  ...l,
+                  isActive: activateBid && l.levelNumber <= bidMaxLvls,
+                }));
+                const activatedAskMatrix = stream.ask.spreadMatrix.map((l) => ({
+                  ...l,
+                  isActive: activateAsk && l.levelNumber <= askMaxLvls,
+                }));
+                
+                updateStreamSet(stream.id, {
+                  state: 'active',
+                  bid: {
+                    ...stream.bid,
+                    isActive: activateBid,
+                    state: 'active',
+                    spreadMatrix: activatedBidMatrix,
+                  },
+                  ask: {
+                    ...stream.ask,
+                    isActive: activateAsk,
+                    state: 'active',
+                    spreadMatrix: activatedAskMatrix,
+                  },
+                  haltReason: undefined,
+                  haltDetails: undefined,
+                  lastLaunchedSnapshot: snapshot,
+                  hasStagingChanges: false,
+                });
+                
+                // Update to success state
+                set((s) => {
+                  if (!s.launchProgress) return s;
+                  const items = s.launchProgress.items.map((item) =>
+                    item.streamId === stream.id
+                      ? { ...item, status: 'success' as const, endTime: Date.now() }
+                      : item
+                  );
+                  const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                  return { launchProgress: { ...s.launchProgress, items, completedCount } };
+                });
+              } else {
+                // Handle launch failure
+                updateStreamSet(stream.id, {
+                  state: 'halted',
+                  haltReason: result.errorType as StreamSet['haltReason'],
+                  haltDetails: result.error,
+                  bid: {
+                    ...stream.bid,
+                    isActive: result.affectedSide !== 'bid' && result.affectedSide !== 'both',
+                    state: result.affectedSide === 'bid' || result.affectedSide === 'both' ? 'halted' : stream.bid.state,
+                  },
+                  ask: {
+                    ...stream.ask,
+                    isActive: result.affectedSide !== 'ask' && result.affectedSide !== 'both',
+                    state: result.affectedSide === 'ask' || result.affectedSide === 'both' ? 'halted' : stream.ask.state,
+                  },
+                });
+                
+                // Update to error state
+                set((s) => {
+                  if (!s.launchProgress) return s;
+                  const items = s.launchProgress.items.map((item) =>
+                    item.streamId === stream.id
+                      ? { ...item, status: 'error' as const, error: result.error, endTime: Date.now() }
+                      : item
+                  );
+                  const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                  return { launchProgress: { ...s.launchProgress, items, completedCount } };
+                });
+              }
+            } catch (err) {
+              // Handle unexpected errors
+              set((s) => {
+                if (!s.launchProgress) return s;
+                const items = s.launchProgress.items.map((item) =>
+                  item.streamId === stream.id
+                    ? { ...item, status: 'error' as const, error: 'Unexpected error', endTime: Date.now() }
+                    : item
+                );
+                const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                return { launchProgress: { ...s.launchProgress, items, completedCount } };
+              });
+            }
+          });
+          
+          // Wait for batch to complete before starting next batch
+          await Promise.all(batchPromises);
+        }
+        
+        // Mark launch progress as complete (stays visible until user dismisses)
+        set((s) => ({
+          isLoading: false,
+          launchingStreamIds: new Set(),
+          launchProgress: s.launchProgress ? { ...s.launchProgress, isActive: false } : null,
+        }));
+      },
+      
+      dismissLaunchProgress: () => {
+        set({ launchProgress: null });
+      },
+
       resetState: () => {
         set({
           streamSets: generateInitialStreamSets(),
@@ -1250,6 +1484,7 @@ export const useStreamStore = create<StreamStore>()(
           activeTab: 'All',
           searchQuery: '',
           isLoading: false,
+          launchProgress: null,
         });
       },
 

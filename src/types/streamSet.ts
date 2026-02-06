@@ -106,3 +106,30 @@ export interface ValidationResult {
   errorType?: 'ffch' | 'yield_crossing' | 'quantity_limit' | 'open_risk';
   affectedSide?: 'bid' | 'ask' | 'both';
 }
+
+// Launch Progress Types for batch launch operations
+export type LaunchProgressStatus = 'pending' | 'processing' | 'success' | 'error';
+
+export interface LaunchProgressItem {
+  streamId: string;
+  streamName: string;
+  status: LaunchProgressStatus;
+  error?: string;
+  startTime?: number;
+  endTime?: number;
+  /** Number of bid orders launched */
+  bidCount: number;
+  /** Number of ask orders launched */
+  askCount: number;
+  /** Security type for grouping in All view */
+  securityType: SecurityType;
+}
+
+export interface LaunchProgressState {
+  isActive: boolean;
+  items: LaunchProgressItem[];
+  completedCount: number;
+  totalCount: number;
+  variant: 'all' | 'bid' | 'ask';
+  startTime: number;
+}

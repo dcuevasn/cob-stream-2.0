@@ -10,9 +10,14 @@ import { cn } from '../../lib/utils';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { BatchAffordanceMarker } from './BatchAffordanceMarker';
 import { isUdiSecurity } from '../../lib/utils';
+import type { SecurityType } from '../../types/streamSet';
+
+interface UnitBatchPopoverProps {
+  securityType?: SecurityType;
+}
 
 /** Subscribe to stable store values to avoid infinite re-renders (getFilteredStreamSets returns new array each call). */
-export function UnitBatchPopover() {
+export function UnitBatchPopover({ securityType }: UnitBatchPopoverProps) {
   const [open, setOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const batchUpdatePriceMode = useStreamStore((s) => s.batchUpdatePriceMode);
@@ -22,7 +27,14 @@ export function UnitBatchPopover() {
   const searchQuery = useStreamStore((s) => s.searchQuery);
   const preferences = useStreamStore((s) => s.preferences);
 
-  const streams = useMemo(() => getFilteredStreamSets(), [getFilteredStreamSets, streamSets, activeTab, searchQuery, preferences]);
+  const streams = useMemo(() => {
+    let filtered = getFilteredStreamSets();
+    // When securityType is provided (in All view sections), filter to just that type
+    if (securityType) {
+      filtered = filtered.filter((s) => s.securityType === securityType);
+    }
+    return filtered;
+  }, [getFilteredStreamSets, streamSets, activeTab, searchQuery, preferences, securityType]);
 
   const notionalLabel = useMemo(() => {
     if (streams.length === 0) return 'Notional';
@@ -34,7 +46,7 @@ export function UnitBatchPopover() {
     (priceMode: 'quantity' | 'notional') => {
       if (isApplying) return;
       setIsApplying(true);
-      batchUpdatePriceMode(priceMode);
+      batchUpdatePriceMode(priceMode, securityType);
       requestAnimationFrame(() => {
         setTimeout(() => {
           setIsApplying(false);
@@ -42,7 +54,7 @@ export function UnitBatchPopover() {
         }, 150);
       });
     },
-    [batchUpdatePriceMode, isApplying]
+    [batchUpdatePriceMode, isApplying, securityType]
   );
 
   return (

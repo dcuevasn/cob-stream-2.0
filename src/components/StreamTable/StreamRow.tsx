@@ -151,6 +151,38 @@ function ManualBidAskInputs({
   );
 }
 
+/** Read-only Live Bid/Ask display when connected to QF price source */
+function LiveBidAskDisplay({
+  bidValue,
+  askValue,
+  formatNumber,
+}: {
+  bidValue: number;
+  askValue: number;
+  formatNumber: (n: number, d?: number) => string;
+}) {
+  return (
+    <div className="flex items-center gap-4" role="group" aria-label="Live price source">
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] font-medium text-live-bid uppercase tracking-wider shrink-0">
+          Live Bid
+        </label>
+        <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-bid bg-muted/30 rounded border border-border">
+          {bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-'}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] font-medium text-live-ask uppercase tracking-wider shrink-0">
+          Live Ask
+        </label>
+        <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-ask bg-muted/30 rounded border border-border">
+          {askValue != null && askValue !== 0 ? formatNumber(askValue) : '-'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const MIN_QUANTITY = 1;
 const MAX_QUANTITY = 50_000_000;
 
@@ -330,9 +362,14 @@ function BatchSpreadHeader({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    if (raw !== '' && raw !== '-' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
+    // Allow: empty, minus sign alone, decimal point sequences, and valid numbers up to 3 decimals
+    if (raw !== '' && raw !== '-' && raw !== '.' && raw !== '-.' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
     setInputStr(raw === '' ? '0' : raw);
-    const n = raw === '' || raw === '-' ? 0 : parseFloat(raw);
+    // Don't apply adjustment for incomplete input (just minus or decimal point)
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
+      return;
+    }
+    const n = parseFloat(raw);
     if (!isNaN(n)) {
       const rounded = roundBps(n);
       setAdjustmentValue(rounded);
@@ -737,13 +774,20 @@ function ExpandedLevelsTable({
           </span>
         </div>
       )}
-      {/* Manual Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
+      {/* Manual Bid/Ask or Live Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
       <div className="flex items-center justify-between gap-4 mb-2 py-2" role="group" aria-label="Price and volume settings">
         <div className="flex items-center gap-4">
           {!isUdi && stream.selectedPriceSource === 'manual' && (
             <ManualBidAskInputs
               stream={stream}
               updateStreamSet={updateStreamSet}
+              formatNumber={formatNumber}
+            />
+          )}
+          {!isUdi && stream.selectedPriceSource && stream.selectedPriceSource !== 'manual' && (
+            <LiveBidAskDisplay
+              bidValue={bidValue}
+              askValue={askValue}
               formatNumber={formatNumber}
             />
           )}

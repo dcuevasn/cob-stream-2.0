@@ -11,16 +11,24 @@ import { useStreamStore } from '../../hooks/useStreamStore';
 import { BatchAffordanceMarker } from './BatchAffordanceMarker';
 import type { CompactSelectOption } from '../ui/compact-select';
 
-/** Build batch options: Manual + unique Quote Feeds from all streams in current view.
+import type { SecurityType } from '../../types/streamSet';
+
+/** Build batch options: Manual + unique Quote Feeds from all streams in current view/section.
  * Subscribes to stable store values to avoid infinite re-renders (getFilteredStreamSets returns new array each call). */
-function useBatchPriceSourceOptions(): CompactSelectOption[] {
+function useBatchPriceSourceOptions(securityType?: SecurityType): CompactSelectOption[] {
   const streamSets = useStreamStore((s) => s.streamSets);
   const activeTab = useStreamStore((s) => s.activeTab);
   const searchQuery = useStreamStore((s) => s.searchQuery);
   const preferences = useStreamStore((s) => s.preferences);
 
   return useMemo(() => {
-    const streams = useStreamStore.getState().getFilteredStreamSets();
+    let streams = useStreamStore.getState().getFilteredStreamSets();
+    
+    // When securityType is provided (in All view sections), filter to just that type
+    if (securityType) {
+      streams = streams.filter((s) => s.securityType === securityType);
+    }
+    
     const options: CompactSelectOption[] = [{ value: 'manual', label: 'Manual', group: '' }];
     const seen = new Set<string>(['manual']);
 
@@ -38,7 +46,7 @@ function useBatchPriceSourceOptions(): CompactSelectOption[] {
     });
 
     return options;
-  }, [streamSets, activeTab, searchQuery, preferences]);
+  }, [streamSets, activeTab, searchQuery, preferences, securityType]);
 }
 
 function getOptionIcon(option: CompactSelectOption) {
@@ -49,7 +57,11 @@ function getOptionIcon(option: CompactSelectOption) {
   );
 }
 
-export function PriceSourceBatchPopover() {
+interface PriceSourceBatchPopoverProps {
+  securityType?: SecurityType;
+}
+
+export function PriceSourceBatchPopover({ securityType }: PriceSourceBatchPopoverProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -57,16 +69,22 @@ export function PriceSourceBatchPopover() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const options = useBatchPriceSourceOptions();
+  const options = useBatchPriceSourceOptions(securityType);
   const batchUpdatePriceSource = useStreamStore((s) => s.batchUpdatePriceSource);
   const streamSets = useStreamStore((s) => s.streamSets);
   const activeTab = useStreamStore((s) => s.activeTab);
   const searchQuery = useStreamStore((s) => s.searchQuery);
   const preferences = useStreamStore((s) => s.preferences);
 
-  // Get dominant/consistent price source from filtered streams
+  // Get dominant/consistent price source from filtered streams (scoped to securityType if provided)
   const dominantPriceSource = useMemo(() => {
-    const streams = useStreamStore.getState().getFilteredStreamSets();
+    let streams = useStreamStore.getState().getFilteredStreamSets();
+    
+    // When securityType is provided (in All view sections), filter to just that type
+    if (securityType) {
+      streams = streams.filter((s) => s.securityType === securityType);
+    }
+    
     if (streams.length === 0) return null;
     
     // Count occurrences of each price source
@@ -88,7 +106,7 @@ export function PriceSourceBatchPopover() {
     
     // Only return dominant if it's used by majority
     return maxCount >= streams.length / 2 ? dominantSource : null;
-  }, [streamSets, activeTab, searchQuery, preferences]);
+  }, [streamSets, activeTab, searchQuery, preferences, securityType]);
   
   // Get display label for dominant source
   const dominantLabel = useMemo(() => {
@@ -127,7 +145,7 @@ export function PriceSourceBatchPopover() {
     (option: CompactSelectOption) => {
       if (isApplying) return;
       setIsApplying(true);
-      batchUpdatePriceSource(option.value);
+      batchUpdatePriceSource(option.value, securityType);
       // Brief feedback then close
       requestAnimationFrame(() => {
         setTimeout(() => {
@@ -136,7 +154,7 @@ export function PriceSourceBatchPopover() {
         }, 150);
       });
     },
-    [batchUpdatePriceSource, isApplying]
+    [batchUpdatePriceSource, isApplying, securityType]
   );
 
   const handleKeyDown = useCallback(

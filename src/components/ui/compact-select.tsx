@@ -38,10 +38,18 @@ export function CompactSelect({
   const listRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((o) => o.value === value);
+  
+  // When value exists but isn't in options (e.g., batch-assigned QF not in this stream's feeds),
+  // create a display-only option to show the current value instead of placeholder
+  const displayOption = selectedOption ?? (value && value !== '' ? {
+    value,
+    label: value, // Show the raw value (e.g., "QF-6") as the label
+    group: 'Quote Feeds',
+  } : null);
 
   // Icon per option: Manual = hand/edit, Quote feed = signal
-  const getOptionIcon = (option: CompactSelectOption) =>
-    option.value === 'manual' || !option.group ? (
+  const getOptionIcon = (option: CompactSelectOption | null) =>
+    !option || option.value === 'manual' || !option.group ? (
       <Hand className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
     ) : (
       <Signal className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
@@ -163,11 +171,11 @@ export function CompactSelect({
           isOpen && 'ring-1 ring-ring'
         )}
       >
-        {selectedOption ? getOptionIcon(selectedOption) : (
+        {displayOption ? getOptionIcon(displayOption) : (
           <Hand className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
         )}
         <span className="truncate text-left flex-1 min-w-0">
-          {selectedOption?.label || placeholder}
+          {displayOption?.label || placeholder}
         </span>
         <ChevronDown className={cn('h-2.5 w-2.5 shrink-0 opacity-60 transition-transform', isOpen && 'rotate-180')} />
       </button>

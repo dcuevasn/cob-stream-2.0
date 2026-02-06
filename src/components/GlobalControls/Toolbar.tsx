@@ -11,6 +11,7 @@ import {
 } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
+import { LaunchProgressPopover } from './LaunchProgressPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { getActiveLevelCount } from '../../lib/utils';
@@ -20,9 +21,7 @@ const WIDE_BREAKPOINT = 896; // px - below this, secondary actions go to More
 
 export function Toolbar() {
   const {
-    launchAllInView,
     pauseAllInView,
-    launchAllLevels,
     pauseAllLevels,
     adjustSpreadBid,
     adjustSpreadAsk,
@@ -32,9 +31,11 @@ export function Toolbar() {
     getFilteredStreamSets,
     batchRevertStagingChanges,
     hasStagedStreamsInView,
+    launchAllWithProgress,
+    launchProgress,
   } = useStreamStore();
 
-  const isBatchLaunching = launchingStreamIds.size > 0;
+  const isBatchLaunching = launchingStreamIds.size > 0 || (launchProgress?.isActive ?? false);
 
   const isWide = useMediaQuery(`(min-width: ${WIDE_BREAKPOINT}px)`);
   const isCompact = useMediaQuery('(max-width: 540px)'); // icon-only for Pause/Launch
@@ -115,23 +116,20 @@ export function Toolbar() {
     setTimeout(() => setIsPausing(false), 200);
   }, [getFilteredStreamSets, pauseAllLevels, isPausing]);
 
+  const handleLaunchAll = React.useCallback(async () => {
+    if (isBatchLaunching) return;
+    await launchAllWithProgress('all');
+  }, [launchAllWithProgress, isBatchLaunching]);
+
   const handleLaunchAllBid = React.useCallback(async () => {
     if (isBatchLaunching) return;
-    const streams = getFilteredStreamSets();
-    const launchableStreams = streams.filter(
-      (ss) => ss.state !== 'cancelled' && ss.state !== 'unconfigured'
-    );
-    await Promise.all(launchableStreams.map((s) => launchAllLevels(s.id, 'bid')));
-  }, [getFilteredStreamSets, launchAllLevels, isBatchLaunching]);
+    await launchAllWithProgress('bid');
+  }, [launchAllWithProgress, isBatchLaunching]);
 
   const handleLaunchAllAsk = React.useCallback(async () => {
     if (isBatchLaunching) return;
-    const streams = getFilteredStreamSets();
-    const launchableStreams = streams.filter(
-      (ss) => ss.state !== 'cancelled' && ss.state !== 'unconfigured'
-    );
-    await Promise.all(launchableStreams.map((s) => launchAllLevels(s.id, 'ask')));
-  }, [getFilteredStreamSets, launchAllLevels, isBatchLaunching]);
+    await launchAllWithProgress('ask');
+  }, [launchAllWithProgress, isBatchLaunching]);
 
   const primaryActions = (
     <>
@@ -196,30 +194,39 @@ export function Toolbar() {
               <Button
                 variant="success"
                 size={isCompact ? 'icon-sm' : 'compact'}
-                className={cn('gap-1 shrink-0 min-w-[32px] px-2', isCompact && 'h-8 min-w-8')}
+                className={cn(
+                  'gap-1 shrink-0 min-w-[32px] px-2',
+                  isCompact && 'h-8 min-w-8',
+                  isBatchLaunching && 'opacity-80 cursor-wait'
+                )}
                 title="Launch All"
+                disabled={isBatchLaunching}
               >
                 {isBatchLaunching ? (
                   <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                 ) : (
                   <Play className="h-3 w-3" />
                 )}
-                {!isCompact && <span className="truncate max-w-[80px]">Launch All</span>}
+                {!isCompact && (
+                  <span className="truncate max-w-[80px]">
+                    {isBatchLaunching ? 'Launching...' : 'Launch All'}
+                  </span>
+                )}
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Launch All</TooltipContent>
+          <TooltipContent>{isBatchLaunching ? 'Launching streams...' : 'Launch All'}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="min-w-[160px]">
-          <DropdownMenuItem onClick={launchAllInView}>
+          <DropdownMenuItem onClick={handleLaunchAll} disabled={isBatchLaunching}>
             <Play className="h-4 w-4 mr-2" />
             Launch All
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleLaunchAllBid}>
+          <DropdownMenuItem onClick={handleLaunchAllBid} disabled={isBatchLaunching}>
             <Play className="h-4 w-4 mr-2" />
             Launch All Bid
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleLaunchAllAsk}>
+          <DropdownMenuItem onClick={handleLaunchAllAsk} disabled={isBatchLaunching}>
             <Play className="h-4 w-4 mr-2" />
             Launch All Ask
           </DropdownMenuItem>
@@ -363,95 +370,100 @@ export function Toolbar() {
   );
 
   return (
-    <div className="border-b border-border bg-card">
-      {/* Actions and Status: buttons on top, status indicators below, right-aligned */}
-      <div className="flex flex-col items-end px-4 py-2 min-w-0 w-full">
-        {/* Actions Bar: buttons only, right-aligned */}
-        <div
-          className={cn(
-            'flex items-center justify-end gap-1 sm:gap-2 min-w-0 w-full',
-            'flex-wrap lg:flex-nowrap'
-          )}
-        >
-          {primaryActions}
-          {isWide ? (
-            <>
-              <div className="h-6 w-px bg-border shrink-0" />
-              {secondaryActions}
-            </>
-          ) : (
-            <>
-              <div className="h-6 w-px bg-border shrink-0" />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1 shrink-0 px-3">
-                    <MoreHorizontal className="h-4 w-4" />
-                    More
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[180px]">
-                  {moreMenuItems}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
-        </div>
-
-        {/* Status Indicators: directly below buttons, right-aligned */}
-        <div
-          role="status"
-          aria-live="polite"
-          className={cn(
-            'flex items-center min-h-[24px] w-full mt-2 pt-2 border-t border-border/50 bg-muted/20',
-            'justify-end'
-          )}
-          title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${pausedCount > 0 ? `, ${pausedCount} Paused` : ''}${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
-        >
-          <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-muted-foreground shrink-0">
-            {/* Only show active indicators when there are active streams */}
-            {activeStreamsCount > 0 && (
+    <>
+      <div className="border-b border-border bg-card">
+        {/* Actions and Status: buttons on top, status indicators below, right-aligned */}
+        <div className="flex flex-col items-end px-4 py-2 min-w-0 w-full">
+          {/* Actions Bar: buttons only, right-aligned */}
+          <div
+            className={cn(
+              'flex items-center justify-end gap-1 sm:gap-2 min-w-0 w-full',
+              'flex-wrap lg:flex-nowrap'
+            )}
+          >
+            {primaryActions}
+            {isWide ? (
               <>
-                <span className="flex items-center gap-1 min-w-0" title="Stream Sets with ≥1 active level">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0" />
-                  <span className="text-[hsl(var(--status-active))] truncate tabular-nums">
-                    {activeStreamsCount} Streams
-                  </span>
-                </span>
-                <span className="flex items-center gap-1 min-w-0" title="Total active levels (Bid + Ask)">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0 opacity-70" />
-                  <span className="text-[hsl(var(--status-active))] truncate tabular-nums opacity-90">
-                    {activeOrdersCount} Orders
-                  </span>
-                </span>
+                <div className="h-6 w-px bg-border shrink-0" />
+                {secondaryActions}
+              </>
+            ) : (
+              <>
+                <div className="h-6 w-px bg-border shrink-0" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 shrink-0 px-3">
+                      <MoreHorizontal className="h-4 w-4" />
+                      More
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[180px]">
+                    {moreMenuItems}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
-            {pausedCount > 0 && (
-              <span className="flex items-center gap-1 min-w-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-paused))] shrink-0" />
-                <span className="text-[hsl(var(--status-paused))] truncate">{pausedCount} Paused</span>
-              </span>
+          </div>
+
+          {/* Status Indicators: directly below buttons, right-aligned */}
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              'flex items-center min-h-[24px] w-full mt-2 pt-2 border-t border-border/50 bg-muted/20',
+              'justify-end'
             )}
-            {inactiveCount > 0 && (
-              <span className="flex items-center gap-1 min-w-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 shrink-0" />
-                <span className="text-gray-500 truncate">{inactiveCount} Inactive</span>
-              </span>
-            )}
-            {hasStagedStreams && (
-              <span className="flex items-center gap-1 min-w-0 hidden sm:flex">
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-staging))] shrink-0" />
-                <span className="text-[hsl(var(--status-staging))] truncate">{stagingCount} Staging</span>
-              </span>
-            )}
-            {haltedCount > 0 && (
-              <span className="flex items-center gap-1 min-w-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-halted))] shrink-0" />
-                <span className="text-[hsl(var(--status-halted))] truncate">{haltedCount} Halted</span>
-              </span>
-            )}
+            title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${pausedCount > 0 ? `, ${pausedCount} Paused` : ''}${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
+          >
+            <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-muted-foreground shrink-0">
+              {/* Only show active indicators when there are active streams */}
+              {activeStreamsCount > 0 && (
+                <>
+                  <span className="flex items-center gap-1 min-w-0" title="Stream Sets with ≥1 active level">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0" />
+                    <span className="text-[hsl(var(--status-active))] truncate tabular-nums">
+                      {activeStreamsCount} Streams
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1 min-w-0" title="Total active levels (Bid + Ask)">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0 opacity-70" />
+                    <span className="text-[hsl(var(--status-active))] truncate tabular-nums opacity-90">
+                      {activeOrdersCount} Orders
+                    </span>
+                  </span>
+                </>
+              )}
+              {pausedCount > 0 && (
+                <span className="flex items-center gap-1 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-paused))] shrink-0" />
+                  <span className="text-[hsl(var(--status-paused))] truncate">{pausedCount} Paused</span>
+                </span>
+              )}
+              {inactiveCount > 0 && (
+                <span className="flex items-center gap-1 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-500 shrink-0" />
+                  <span className="text-gray-500 truncate">{inactiveCount} Inactive</span>
+                </span>
+              )}
+              {hasStagedStreams && (
+                <span className="flex items-center gap-1 min-w-0 hidden sm:flex">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-staging))] shrink-0" />
+                  <span className="text-[hsl(var(--status-staging))] truncate">{stagingCount} Staging</span>
+                </span>
+              )}
+              {haltedCount > 0 && (
+                <span className="flex items-center gap-1 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-halted))] shrink-0" />
+                  <span className="text-[hsl(var(--status-halted))] truncate">{haltedCount} Halted</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      
+      {/* Launch Progress Popover - rendered via portal */}
+      <LaunchProgressPopover />
+    </>
   );
 }

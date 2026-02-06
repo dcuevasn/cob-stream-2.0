@@ -85,11 +85,21 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    if (raw !== '' && raw !== '-' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
+    // Allow: empty, minus sign alone, decimal point sequences, and valid numbers up to 3 decimals
+    if (raw !== '' && raw !== '-' && raw !== '.' && raw !== '-.' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
     setInputStr(raw === '' ? '0' : raw);
-    const n = raw === '' || raw === '-' ? 0 : parseFloat(raw);
+    // Don't apply adjustment for incomplete input (just minus or decimal point)
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
+      return;
+    }
+    const n = parseFloat(raw);
     if (!isNaN(n)) {
-      applyAdjustment(n);
+      const rounded = roundBps(n);
+      const delta = rounded - adjustmentValue;
+      if (Math.abs(delta) > 0.0001) {
+        adjustSpreadForType(side, delta, securityType);
+      }
+      setAdjustmentValue(rounded);
     }
   };
 
@@ -253,7 +263,7 @@ export function StreamTableHeader({ securityType }: StreamTableHeaderProps) {
       <div className="text-center"></div>
       <div>Name</div>
       <div className="min-w-0">
-        <PriceSourceBatchPopover />
+        <PriceSourceBatchPopover securityType={securityType} />
       </div>
       <span className="text-center">BLVL</span>
       <span className="text-right">BSIZ</span>
@@ -270,7 +280,7 @@ export function StreamTableHeader({ securityType }: StreamTableHeaderProps) {
       <span className="text-right">ASIZ</span>
       <span className="text-center">ALVL</span>
       <div className="text-center min-w-0">
-        <UnitBatchPopover />
+        <UnitBatchPopover securityType={securityType} />
       </div>
       <div className="text-center">Actions</div>
     </div>
