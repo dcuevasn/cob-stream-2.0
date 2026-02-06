@@ -16,6 +16,10 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
 }
 
 /* CSS Variables for theming */
@@ -57,9 +61,9 @@
   --price-override: 217 91% 60%;
   --price-frozen: 38 92% 50%;
 
-  /* Live Bid/Ask - softer tones for external market data (lighter, slightly desaturated) */
-  --live-bid: 142 55% 52%;
-  --live-ask: 0 55% 58%;
+  /* Live Bid/Ask - distinct colors for external market data */
+  --live-bid: 38 100% 65%;  /* #FFB84D - orange/amber */
+  --live-ask: 213 100% 65%; /* #4A9EFF - blue */
 }
 
 * {
@@ -158,12 +162,12 @@ body {
   background-color: hsl(var(--status-halted) / 0.1);
 }
 
-/* Live Bid/Ask - softer tones for external market data columns */
+/* Live Bid/Ask - distinct colors for external market data columns */
 .text-live-bid {
-  color: hsl(var(--live-bid));
+  color: #FFB84D; /* orange/amber */
 }
 .text-live-ask {
-  color: hsl(var(--live-ask));
+  color: #4A9EFF; /* blue */
 }
 
 /* Stream Set selected state - blue outline only, no fill. Inset box-shadow avoids overflow clipping. */

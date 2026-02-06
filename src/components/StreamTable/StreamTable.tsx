@@ -154,7 +154,7 @@ export function StreamTable({ securityType }: StreamTableProps) {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-0 pb-0 pt-0">
-                  <StreamTableHeader />
+                  <StreamTableHeader securityType={type} />
                   {typeStreams.map((stream) => (
                     <StreamRow key={stream.id} stream={stream} />
                   ))}

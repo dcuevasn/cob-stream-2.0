@@ -15,6 +15,8 @@ interface StreamStore {
   isLoading: boolean;
   launchingStreamIds: Set<string>;
   launchingLevelKeys: Set<string>;
+  /** Stream IDs that have attempted launch without a valid price source configured */
+  missingPriceSourceStreamIds: Set<string>;
   preferences: UserPreferences;
   /** Accordion open sections in All view (SecurityType values). Persists across view changes. */
   accordionOpenSections: string[];
@@ -54,9 +56,18 @@ interface StreamStore {
   revertStagingChanges: (id: string) => void;
   batchRevertStagingChanges: () => void;
 
+  // Price source validation
+  clearMissingPriceSourceError: (id: string) => void;
+
   // Spread adjustments
   adjustSpreadBid: (delta: number) => void;
   adjustSpreadAsk: (delta: number) => void;
+  
+  // Type-scoped batch spread adjustments (for column header popovers)
+  adjustSpreadForType: (side: 'bid' | 'ask', delta: number, securityType?: SecurityType) => void;
+  resetSpreadsForType: (side: 'bid' | 'ask', securityType?: SecurityType) => void;
+  revertSpreadsForType: (side: 'bid' | 'ask', securityType?: SecurityType) => void;
+  getStreamsForBatchSpread: (securityType?: SecurityType) => StreamSet[];
 
   // Reset/Demo
   generateDemoData: (type?: DemoStreamType) => void;
@@ -125,6 +136,18 @@ function checkAndClearHaltState(id: string) {
   }
 }
 
+/** Check if a stream has a valid price source configured for launch */
+function isPriceSourceValid(stream: StreamSet): boolean {
+  const source = stream.selectedPriceSource;
+  // Invalid if null, undefined, empty string, or placeholder
+  if (!source || source === '' || source === '-') return false;
+  // Valid if manual
+  if (source === 'manual') return true;
+  // Valid if it's a quote feed that exists in the stream's available feeds
+  if (stream.quoteFeeds?.some((f) => f.feedId === source)) return true;
+  return false;
+}
+
 const defaultPreferences: UserPreferences = {
   securityNameFormat: 'short',
   quantityDisplay: 'quantity',
@@ -146,6 +169,7 @@ export const useStreamStore = create<StreamStore>()(
       isLoading: false,
       launchingStreamIds: new Set<string>(),
       launchingLevelKeys: new Set<string>(),
+      missingPriceSourceStreamIds: new Set<string>(),
       preferences: defaultPreferences,
       accordionOpenSections: ['M Bono', 'UDI Bono', 'Cetes', 'Corporate MXN', 'Corporate UDI'],
 
@@ -205,10 +229,24 @@ export const useStreamStore = create<StreamStore>()(
         const stream = streamSets.find((ss) => ss.id === id);
         if (!stream) return;
 
-        set((s) => ({
-          isLoading: true,
-          launchingStreamIds: new Set(s.launchingStreamIds).add(id),
-        }));
+        // Validate price source before launching
+        if (!isPriceSourceValid(stream)) {
+          set((s) => ({
+            missingPriceSourceStreamIds: new Set(s.missingPriceSourceStreamIds).add(id),
+          }));
+          return;
+        }
+
+        // Clear any previous missing price source error
+        set((s) => {
+          const next = new Set(s.missingPriceSourceStreamIds);
+          next.delete(id);
+          return {
+            isLoading: true,
+            launchingStreamIds: new Set(s.launchingStreamIds).add(id),
+            missingPriceSourceStreamIds: next,
+          };
+        });
         const result = await simulateLaunch(stream);
 
         if (result.success) {
@@ -342,6 +380,14 @@ export const useStreamStore = create<StreamStore>()(
         const stream = streamSets.find((ss) => ss.id === streamId);
         if (!stream) return;
 
+        // Validate price source before launching
+        if (!isPriceSourceValid(stream)) {
+          set((s) => ({
+            missingPriceSourceStreamIds: new Set(s.missingPriceSourceStreamIds).add(streamId),
+          }));
+          return;
+        }
+
         const streamSide = side === 'bid' ? stream.bid : stream.ask;
         const maxLvls = streamSide.maxLvls ?? 1;
         if (maxLvls === 0) return; // No levels can be active
@@ -468,6 +514,14 @@ export const useStreamStore = create<StreamStore>()(
         const { streamSets, updateStreamSet } = get();
         const stream = streamSets.find((ss) => ss.id === streamId);
         if (!stream) return;
+
+        // Validate price source before launching
+        if (!isPriceSourceValid(stream)) {
+          set((s) => ({
+            missingPriceSourceStreamIds: new Set(s.missingPriceSourceStreamIds).add(streamId),
+          }));
+          return;
+        }
 
         const streamSide = side === 'bid' ? stream.bid : stream.ask;
         const maxLvls = streamSide.maxLvls ?? 1;
@@ -952,6 +1006,15 @@ export const useStreamStore = create<StreamStore>()(
         }, { skipStaging: true });
       },
 
+      /** Clear the missing price source error for a stream */
+      clearMissingPriceSourceError: (id) => {
+        set((s) => {
+          const next = new Set(s.missingPriceSourceStreamIds);
+          next.delete(id);
+          return { missingPriceSourceStreamIds: next };
+        });
+      },
+
       /** Batch revert all staged changes in current view to last launched snapshots. */
       batchRevertStagingChanges: () => {
         const { getFilteredStreamSets } = get();
@@ -1046,6 +1109,117 @@ export const useStreamStore = create<StreamStore>()(
                   ...level,
                   deltaBps: level.deltaBps + delta,
                 })),
+              },
+            };
+          }),
+        }));
+      },
+
+      // Type-scoped batch spread adjustments (for column header popovers)
+      getStreamsForBatchSpread: (securityType) => {
+        const { streamSets, activeTab } = get();
+        if (securityType) {
+          // All view: filter by specific section type
+          return streamSets.filter((s) => s.securityType === securityType);
+        }
+        // Individual view: use standard filtered streams
+        return get().getFilteredStreamSets();
+      },
+
+      adjustSpreadForType: (side, delta, securityType) => {
+        const targetStreams = get().getStreamsForBatchSpread(securityType);
+        const targetIds = new Set(targetStreams.map((s) => s.id));
+        
+        set((state) => ({
+          streamSets: state.streamSets.map((ss) => {
+            if (!targetIds.has(ss.id)) return ss;
+            const sideData = side === 'bid' ? ss.bid : ss.ask;
+            const updatedMatrix = sideData.spreadMatrix.map((level) => ({
+              ...level,
+              deltaBps: level.deltaBps + delta,
+            }));
+            return {
+              ...ss,
+              hasStagingChanges: true,
+              [side]: {
+                ...sideData,
+                spreadMatrix: updatedMatrix,
+              },
+            };
+          }),
+        }));
+      },
+
+      resetSpreadsForType: (side, securityType) => {
+        const targetStreams = get().getStreamsForBatchSpread(securityType);
+        const targetIds = new Set(targetStreams.map((s) => s.id));
+        // Default spreads: L1=0, L2=1, L3=4, L4=5, L5=6 bps (negative for ask)
+        const defaultSpreads = [0, 1, 4, 5, 6];
+        
+        set((state) => ({
+          streamSets: state.streamSets.map((ss) => {
+            if (!targetIds.has(ss.id)) return ss;
+            const sideData = side === 'bid' ? ss.bid : ss.ask;
+            const updatedMatrix = sideData.spreadMatrix.map((level, i) => ({
+              ...level,
+              deltaBps: side === 'ask' ? -Math.abs(defaultSpreads[i] ?? 0) : (defaultSpreads[i] ?? 0),
+            }));
+            return {
+              ...ss,
+              hasStagingChanges: true,
+              [side]: {
+                ...sideData,
+                spreadMatrix: updatedMatrix,
+              },
+            };
+          }),
+        }));
+      },
+
+      revertSpreadsForType: (side, securityType) => {
+        const targetStreams = get().getStreamsForBatchSpread(securityType);
+        const targetIds = new Set(targetStreams.map((s) => s.id));
+        
+        set((state) => ({
+          streamSets: state.streamSets.map((ss) => {
+            if (!targetIds.has(ss.id)) return ss;
+            // Only revert if we have a snapshot to revert to
+            if (!ss.lastLaunchedSnapshot) return ss;
+            
+            const snap = ss.lastLaunchedSnapshot;
+            const snapMatrix = side === 'bid' ? snap.bid.spreadMatrix : snap.ask.spreadMatrix;
+            const sideData = side === 'bid' ? ss.bid : ss.ask;
+            
+            // Restore spread values from snapshot
+            const revertedMatrix = sideData.spreadMatrix.map((level, i) => {
+              const snapLevel = snapMatrix[i];
+              return snapLevel
+                ? { ...level, deltaBps: snapLevel.deltaBps }
+                : level;
+            });
+            
+            // Check if the other side has staging changes
+            const otherSide = side === 'bid' ? 'ask' : 'bid';
+            const otherSideData = ss[otherSide];
+            const otherSnapMatrix = side === 'bid' ? snap.ask.spreadMatrix : snap.bid.spreadMatrix;
+            const otherSideHasChanges = otherSideData.spreadMatrix.some((level, i) => {
+              const snapLevel = otherSnapMatrix[i];
+              return snapLevel && level.deltaBps !== snapLevel.deltaBps;
+            });
+            
+            // Also check other staging fields
+            const hasOtherStagingChanges = otherSideHasChanges ||
+              ss.selectedPriceSource !== snap.selectedPriceSource ||
+              ss.priceMode !== snap.priceMode ||
+              ss.bid.maxLvls !== snap.bid.maxLvls ||
+              ss.ask.maxLvls !== snap.ask.maxLvls;
+            
+            return {
+              ...ss,
+              hasStagingChanges: hasOtherStagingChanges,
+              [side]: {
+                ...sideData,
+                spreadMatrix: revertedMatrix,
               },
             };
           }),

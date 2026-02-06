@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useEffect } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel } from '../../lib/utils';
 
@@ -288,11 +288,13 @@ function BatchSpreadHeader({
   stream,
   onBatchAdjust,
   onResetToDefault,
+  onCancelEdits,
 }: {
   side: 'bid' | 'ask';
   stream: StreamSet;
   onBatchAdjust: (side: 'bid' | 'ask', baseSpreads: number[], adjustmentBps: number) => void;
   onResetToDefault: (side: 'bid' | 'ask') => void;
+  onCancelEdits: (side: 'bid' | 'ask') => void;
 }) {
   const [open, setOpen] = useState(false);
   const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
@@ -370,6 +372,12 @@ function BatchSpreadHeader({
     setAdjustmentValue(0);
     setInputStr('0');
     onResetToDefault(side);
+  };
+
+  const handleCancelEdits = () => {
+    setAdjustmentValue(0);
+    setInputStr('0');
+    onCancelEdits(side);
   };
 
   return (
@@ -455,15 +463,24 @@ function BatchSpreadHeader({
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <div className="mt-2.5 flex justify-end">
+          {/* Action Buttons - Cancel Edits and Reset side-by-side */}
+          <div className="mt-2.5 flex items-center justify-end gap-2">
             <Button
-              variant="outline"
-              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCancelEdits();
+              }}
+              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap"
+              aria-label="Cancel spread edits and revert to original values"
+            >
+              Cancel edits
+            </Button>
+            <Button
               onClick={(e) => {
                 e.stopPropagation();
                 handleResetToDefault();
               }}
-              className="h-7 w-auto shrink-0 gap-1 px-3 py-1.5 text-[10px] font-medium"
+              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap gap-1"
               aria-label="Reset all level spreads to default values"
             >
               <RotateCcw className="h-2.5 w-2.5 shrink-0" />
@@ -609,6 +626,44 @@ function ExpandedLevelsTable({
     [stream, updateStreamSet]
   );
 
+  const batchCancelEditsSpread = useCallback(
+    (side: 'bid' | 'ask') => {
+      // Revert spreads to snapshot values (if available)
+      const snapshot = stream.lastLaunchedSnapshot;
+      if (!snapshot) return;
+      
+      const streamSide = side === 'bid' ? stream.bid : stream.ask;
+      const snapMatrix = side === 'bid' ? snapshot.bid.spreadMatrix : snapshot.ask.spreadMatrix;
+      
+      const revertedMatrix = streamSide.spreadMatrix.map((l, i) => {
+        const snapLevel = snapMatrix[i];
+        return snapLevel ? { ...l, deltaBps: snapLevel.deltaBps } : l;
+      });
+      
+      // Check if the other side has staging changes
+      const otherSide = side === 'bid' ? 'ask' : 'bid';
+      const otherSideData = stream[otherSide];
+      const otherSnapMatrix = side === 'bid' ? snapshot.ask.spreadMatrix : snapshot.bid.spreadMatrix;
+      const otherSideHasChanges = otherSideData.spreadMatrix.some((level, i) => {
+        const snapLevel = otherSnapMatrix[i];
+        return snapLevel && Math.abs(level.deltaBps - snapLevel.deltaBps) > 0.0001;
+      });
+      
+      // Also check other staging fields
+      const hasOtherStagingChanges = otherSideHasChanges ||
+        stream.selectedPriceSource !== snapshot.selectedPriceSource ||
+        stream.priceMode !== snapshot.priceMode ||
+        stream.bid.maxLvls !== snapshot.bid.maxLvls ||
+        stream.ask.maxLvls !== snapshot.ask.maxLvls;
+      
+      updateStreamSet(stream.id, {
+        [side]: { ...streamSide, spreadMatrix: revertedMatrix },
+        hasStagingChanges: hasOtherStagingChanges,
+      }, { skipStaging: true });
+    },
+    [stream, updateStreamSet]
+  );
+
   const isUdi = isUdiSecurity(stream.securityType);
   const volumeLabel = getVolumeLabel(stream.priceMode, stream.securityType);
   const notionalToggleLabel = getNotionalToggleLabel(stream.securityType);
@@ -683,14 +738,16 @@ function ExpandedLevelsTable({
         </div>
       )}
       {/* Manual Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
-      <div className="flex items-center gap-4 mb-2" role="group" aria-label="Price and volume settings">
-        {!isUdi && stream.selectedPriceSource === 'manual' && (
-          <ManualBidAskInputs
-            stream={stream}
-            updateStreamSet={updateStreamSet}
-            formatNumber={formatNumber}
-          />
-        )}
+      <div className="flex items-center justify-between gap-4 mb-2 py-2" role="group" aria-label="Price and volume settings">
+        <div className="flex items-center gap-4">
+          {!isUdi && stream.selectedPriceSource === 'manual' && (
+            <ManualBidAskInputs
+              stream={stream}
+              updateStreamSet={updateStreamSet}
+              formatNumber={formatNumber}
+            />
+          )}
+        </div>
         <div
           role="tablist"
           aria-label="Volume unit"
@@ -826,7 +883,7 @@ function ExpandedLevelsTable({
                     <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
                   </th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium">
-                    <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
+                    <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
                   </th>
                   <th className="text-left py-1 px-2 text-muted-foreground font-medium">Yield</th>
                 </tr>
@@ -934,7 +991,7 @@ function ExpandedLevelsTable({
                 <tr className="bg-muted/50 border-b border-border/50">
                   <th className="text-left py-1 px-2 text-muted-foreground font-medium">Yield</th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium">
-                    <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
+                    <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
                   </th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium">
                     <BatchQtyHeader volumeLabel={volumeLabel} side="ask" stream={stream} onBatchApply={batchUpdateQty} />
@@ -1237,6 +1294,8 @@ export function StreamRow({ stream }: StreamRowProps) {
     updateStreamSet,
     launchingStreamIds,
     launchingLevelKeys,
+    missingPriceSourceStreamIds,
+    clearMissingPriceSourceError,
   } = useStreamStore();
 
   const isExpanded = expandedStreamIds.has(stream.id);
@@ -1302,6 +1361,9 @@ export function StreamRow({ stream }: StreamRowProps) {
     launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ||
     launchingLevelKeys.has(`${stream.id}-ask-pause-all`);
 
+  /** Check if this stream has the missing price source error */
+  const hasMissingPriceSourceError = missingPriceSourceStreamIds.has(stream.id);
+
   // Build price source options: Manual + Quote Feeds group (QF-1, QF-2, …)
   const priceSourceOptions = useMemo<CompactSelectOption[]>(() => {
     const options: CompactSelectOption[] = [
@@ -1327,6 +1389,11 @@ export function StreamRow({ stream }: StreamRowProps) {
   const handlePriceSourceChange = (value: string, _option: CompactSelectOption) => {
     const isManual = value === 'manual';
     const feed = stream.quoteFeeds?.find(f => f.feedId === value);
+
+    // Clear the missing price source error when user selects a valid source
+    if (hasMissingPriceSourceError && (isManual || feed)) {
+      clearMissingPriceSourceError(stream.id);
+    }
 
     // When transitioning from unconfigured, move to staging
     const stateUpdate = stream.state === 'unconfigured'
@@ -1444,125 +1511,135 @@ export function StreamRow({ stream }: StreamRowProps) {
           />
         </div>
 
-        {/* Live Bid - softer tone for external market data; "/" prefix when live source */}
-        {/* Maintain active styling when prices exist, regardless of execution state */}
-        <span className={cn(
-          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-          bidValue != null && bidValue !== 0 ? (isManual ? 'text-live-bid' : '') : 'text-muted-foreground'
-        )}>
-          {bidValue != null && bidValue !== 0
-            ? isManual
-              ? formatNumber(bidValue)
-              : (
-                  <>
-                    <span className="text-white">/</span>
-                    <span className="text-live-bid">{formatNumber(bidValue)}</span>
-                  </>
-                )
-            : '-'}
-        </span>
-
-        {/* Live Ask - softer tone for external market data; "/" prefix when live source */}
-        {/* Maintain active styling when prices exist, regardless of execution state */}
-        <span className={cn(
-          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-          askValue != null && askValue !== 0 ? (isManual ? 'text-live-ask' : '') : 'text-muted-foreground'
-        )}>
-          {askValue != null && askValue !== 0
-            ? isManual
-              ? formatNumber(askValue)
-              : (
-                  <>
-                    <span className="text-white">/</span>
-                    <span className="text-live-ask">{formatNumber(askValue)}</span>
-                  </>
-                )
-            : '-'}
-        </span>
-
         {/* BID LVL - count of active bid levels */}
-        {/* Always render cell to maintain column alignment, show "-" when no active levels */}
+        {/* Show "-" when unconfigured or no active levels */}
         <span className={cn(
           'text-center tabular-nums text-xs',
-          bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
+          stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
         )}>
-          {bidActiveCount > 0 ? bidActiveCount : '-'}
+          {stream.state === 'unconfigured' ? '-' : (bidActiveCount > 0 ? bidActiveCount : '-')}
         </span>
 
         {/* BSIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
           (stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0 
             ? (isBidL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
             : 'text-muted-foreground'
         )}>
-          {(stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
-            ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
-            : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            ((stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
+              ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
+              : '-')}
         </span>
 
         {/* BSP - spread from best/innermost active bid level */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
           bidBestLevel?.deltaBps != null
             ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
             : 'text-muted-foreground'
         )}>
-          {bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
         </span>
 
         {/* BID */}
-        {/* Maintain active styling when price available, regardless of execution state */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs',
-          bidValue != null && bidValue !== 0 ? 'text-green-400' : 'text-muted-foreground'
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
+          (bidValue != null && bidValue !== 0 ? 'text-green-400' : 'text-muted-foreground')
         )}>
-          {bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            (bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-')}
+        </span>
+
+        {/* Live Bid - softer tone for external market data */}
+        {/* Show "-" when unconfigured */}
+        <span className={cn(
+          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
+          (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
+        )}>
+          {stream.state === 'unconfigured' ? '-' :
+            (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
+        </span>
+
+        {/* Live Ask - softer tone for external market data */}
+        {/* Show "-" when unconfigured */}
+        <span className={cn(
+          'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
+          (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
+        )}>
+          {stream.state === 'unconfigured' ? '-' :
+            (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
         </span>
 
         {/* ASK */}
-        {/* Maintain active styling when price available, regardless of execution state */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs',
-          askValue != null && askValue !== 0 ? 'text-red-400' : 'text-muted-foreground'
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
+          (askValue != null && askValue !== 0 ? 'text-red-400' : 'text-muted-foreground')
         )}>
-          {askValue != null && askValue !== 0 ? formatNumber(askYield) : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            (askValue != null && askValue !== 0 ? formatNumber(askYield) : '-')}
         </span>
 
         {/* ASP - spread from best/innermost active ask level */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
           askBestLevel?.deltaBps != null
             ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
             : 'text-muted-foreground'
         )}>
-          {askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            (askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-')}
         </span>
 
         {/* ASIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
+        {/* Show "-" when unconfigured */}
         <span className={cn(
           'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+          stream.state === 'unconfigured' ? 'text-muted-foreground' :
           (stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
             ? (isAskL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
             : 'text-muted-foreground'
         )}>
-          {(stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
-            ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
-            : '-'}
+          {stream.state === 'unconfigured' ? '-' :
+            ((stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
+              ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
+              : '-')}
         </span>
 
         {/* ALVL - count of active ask levels */}
-        {/* Always render cell to maintain column alignment, show "-" when no active levels */}
+        {/* Show "-" when unconfigured or no active levels */}
         <span className={cn(
           'text-center tabular-nums text-xs',
-          askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
+          stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
         )}>
-          {askActiveCount > 0 ? askActiveCount : '-'}
+          {stream.state === 'unconfigured' ? '-' : (askActiveCount > 0 ? askActiveCount : '-')}
         </span>
 
         {/* UNIT - volume mode */}
-        <span className="text-center text-xs text-muted-foreground">
-          {stream.priceMode === 'notional' ? 'MXN' : 'QTY'}
+        {/* Show "-" when unconfigured, blue highlight when staged */}
+        <span className={cn(
+          'text-center text-xs',
+          stream.state === 'unconfigured'
+            ? 'text-muted-foreground'
+            : stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode
+              ? 'text-blue-400 font-medium'
+              : 'text-muted-foreground'
+        )}>
+          {stream.state === 'unconfigured' ? '-' : (stream.priceMode === 'notional' ? 'MXN' : 'QTY')}
         </span>
 
         {/* Actions */}
@@ -1645,6 +1722,34 @@ export function StreamRow({ stream }: StreamRowProps) {
           </Button>
         </div>
       </div>
+
+      {/* Missing Price Source Alert Banner */}
+      {hasMissingPriceSourceError && (
+        <div className="px-4 pb-2">
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-red-500/10 text-red-500 dark:text-red-400 text-[11px] min-h-[28px] h-[30px]"
+            style={{ paddingLeft: '8px', paddingRight: '8px' }}
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate shrink-0">
+                Cannot launch: Please select a Price Source (QF or Manual) before launching this stream.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearMissingPriceSourceError(stream.id);
+              }}
+              className="text-red-400 hover:text-red-300 text-[10px] font-medium px-2 py-0.5 rounded hover:bg-red-500/20 transition-colors shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Validation Banner for halted streams */}
       {stream.state === 'halted' && stream.haltDetails && (
