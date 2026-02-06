@@ -88,6 +88,10 @@ export interface StreamQuoteFeed {
   feedName: string;
   bid: number; // Always > ask
   ask: number;
+  /** Timestamp when bid price was last received */
+  bidTimestamp?: string;
+  /** Timestamp when ask price was last received */
+  askTimestamp?: string;
 }
 
 export interface UserPreferences {
@@ -128,6 +132,31 @@ export interface LaunchProgressItem {
 export interface LaunchProgressState {
   isActive: boolean;
   items: LaunchProgressItem[];
+  completedCount: number;
+  totalCount: number;
+  variant: 'all' | 'bid' | 'ask';
+  startTime: number;
+}
+
+// Pause Progress Types for batch pause operations (mirrors Launch progress)
+export interface PauseProgressItem {
+  streamId: string;
+  streamName: string;
+  status: LaunchProgressStatus;
+  error?: string;
+  startTime?: number;
+  endTime?: number;
+  /** Number of bid orders being paused */
+  bidCount: number;
+  /** Number of ask orders being paused */
+  askCount: number;
+  /** Security type for grouping in All view */
+  securityType: SecurityType;
+}
+
+export interface PauseProgressState {
+  isActive: boolean;
+  items: PauseProgressItem[];
   completedCount: number;
   totalCount: number;
   variant: 'all' | 'bid' | 'ask';

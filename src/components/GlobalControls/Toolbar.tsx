@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Pause, Plus, Play, Minus, RefreshCw, Sparkles, MoreHorizontal, RotateCcw, ChevronDown } from 'lucide-react';
+import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, FlaskConical } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -12,6 +12,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
 import { LaunchProgressPopover } from './LaunchProgressPopover';
+import { PauseProgressPopover } from './PauseProgressPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { getActiveLevelCount } from '../../lib/utils';
@@ -21,8 +22,6 @@ const WIDE_BREAKPOINT = 896; // px - below this, secondary actions go to More
 
 export function Toolbar() {
   const {
-    pauseAllInView,
-    pauseAllLevels,
     adjustSpreadBid,
     adjustSpreadAsk,
     addStreamSet,
@@ -33,9 +32,12 @@ export function Toolbar() {
     hasStagedStreamsInView,
     launchAllWithProgress,
     launchProgress,
+    pauseAllWithProgress,
+    pauseProgress,
   } = useStreamStore();
 
   const isBatchLaunching = launchingStreamIds.size > 0 || (launchProgress?.isActive ?? false);
+  const isBatchPausing = pauseProgress?.isActive ?? false;
 
   const isWide = useMediaQuery(`(min-width: ${WIDE_BREAKPOINT}px)`);
   const isCompact = useMediaQuery('(max-width: 540px)'); // icon-only for Pause/Launch
@@ -73,7 +75,6 @@ export function Toolbar() {
   const haltedCount = filteredStreams.filter((s) => s.state === 'halted').length;
 
   const [isReverting, setIsReverting] = React.useState(false);
-  const [isPausing, setIsPausing] = React.useState(false);
 
   const hasStagedStreams = hasStagedStreamsInView();
 
@@ -84,37 +85,20 @@ export function Toolbar() {
     setTimeout(() => setIsReverting(false), 200);
   }, [batchRevertStagingChanges, isReverting, hasStagedStreams]);
 
-  const handlePauseAll = React.useCallback(() => {
-    if (isPausing) return;
-    setIsPausing(true);
-    pauseAllInView();
-    setTimeout(() => setIsPausing(false), 200);
-  }, [pauseAllInView, isPausing]);
+  const handlePauseAll = React.useCallback(async () => {
+    if (isBatchPausing) return;
+    await pauseAllWithProgress('all');
+  }, [pauseAllWithProgress, isBatchPausing]);
 
-  // Batch actions for bid/ask sides across all streams
   const handlePauseAllBid = React.useCallback(async () => {
-    if (isPausing) return;
-    setIsPausing(true);
-    const streams = getFilteredStreamSets();
-    // Pause bid side on ALL streams that have bid levels (not just active state)
-    const streamsToPause = streams.filter(
-      (ss) => ss.state !== 'cancelled' && ss.state !== 'unconfigured'
-    );
-    await Promise.all(streamsToPause.map((s) => pauseAllLevels(s.id, 'bid')));
-    setTimeout(() => setIsPausing(false), 200);
-  }, [getFilteredStreamSets, pauseAllLevels, isPausing]);
+    if (isBatchPausing) return;
+    await pauseAllWithProgress('bid');
+  }, [pauseAllWithProgress, isBatchPausing]);
 
   const handlePauseAllAsk = React.useCallback(async () => {
-    if (isPausing) return;
-    setIsPausing(true);
-    const streams = getFilteredStreamSets();
-    // Pause ask side on ALL streams that have ask levels (not just active state)
-    const streamsToPause = streams.filter(
-      (ss) => ss.state !== 'cancelled' && ss.state !== 'unconfigured'
-    );
-    await Promise.all(streamsToPause.map((s) => pauseAllLevels(s.id, 'ask')));
-    setTimeout(() => setIsPausing(false), 200);
-  }, [getFilteredStreamSets, pauseAllLevels, isPausing]);
+    if (isBatchPausing) return;
+    await pauseAllWithProgress('ask');
+  }, [pauseAllWithProgress, isBatchPausing]);
 
   const handleLaunchAll = React.useCallback(async () => {
     if (isBatchLaunching) return;
@@ -133,6 +117,52 @@ export function Toolbar() {
 
   const primaryActions = (
     <>
+      {/* Test/Demo Data Button */}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size={isCompact ? 'icon-sm' : 'sm'}
+                className={cn(
+                  'gap-1 shrink-0 px-3 bg-amber-500/15 border-amber-500/50 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300',
+                  isCompact && 'h-8 min-w-8 px-2'
+                )}
+                title="Test Only - Generate demo data"
+              >
+                <FlaskConical className="h-4 w-4" />
+                {!isCompact && <span className="truncate">Test Only</span>}
+                <ChevronDown className="h-3 w-3 ml-0.5 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Generate demo data for testing</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="start" className="min-w-[220px]">
+          <DropdownMenuItem onClick={() => generateDemoData('new_stream')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            New Stream
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('yield_crossing')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            Stream with Yield Crossing Alert
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('ffch')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            Stream with FFCH Alert
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('staged')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            Staged Stream
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('unconfigured')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            Unconfigured Stream
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -156,30 +186,40 @@ export function Toolbar() {
               <Button
                 variant="outline"
                 size={isCompact ? 'icon-sm' : 'compact'}
-                className={cn('gap-1 shrink-0 px-3 text-red-400 border-red-400/50 hover:bg-red-400/10 hover:text-red-300', isCompact && 'h-8 min-w-8 px-2')}
+                className={cn(
+                  'gap-1 shrink-0 px-3 text-red-400 border-red-400/50 hover:bg-red-400/10 hover:text-red-300',
+                  isCompact && 'h-8 min-w-8 px-2',
+                  isBatchPausing && 'opacity-80 cursor-wait'
+                )}
                 title="Pause All"
+                disabled={isBatchPausing}
               >
-                {isPausing ? (
+                {isBatchPausing ? (
                   <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                 ) : (
                   <Pause className="h-3 w-3" />
                 )}
-                {!isCompact && <span className="truncate max-w-[80px]">Pause All</span>}
+                {!isCompact && (
+                  <span className="truncate max-w-[80px]">
+                    {isBatchPausing ? 'Pausing...' : 'Pause All'}
+                  </span>
+                )}
+                <ChevronDown className="h-3 w-3 ml-0.5 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Pause All</TooltipContent>
+          <TooltipContent>{isBatchPausing ? 'Pausing streams...' : 'Pause All'}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="min-w-[160px]">
-          <DropdownMenuItem onClick={handlePauseAll}>
+          <DropdownMenuItem onClick={handlePauseAll} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
             Pause All
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handlePauseAllBid}>
+          <DropdownMenuItem onClick={handlePauseAllBid} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
             Pause All Bid
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handlePauseAllAsk}>
+          <DropdownMenuItem onClick={handlePauseAllAsk} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
             Pause All Ask
           </DropdownMenuItem>
@@ -212,6 +252,7 @@ export function Toolbar() {
                     {isBatchLaunching ? 'Launching...' : 'Launch All'}
                   </span>
                 )}
+                <ChevronDown className="h-3 w-3 ml-0.5 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -257,50 +298,6 @@ export function Toolbar() {
           <div className="h-6 w-px bg-border shrink-0" />
         </>
       )}
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1 shrink-0 px-3 border-purple-500/50 text-purple-400 hover:bg-purple-500/10 hover:text-purple-300"
-                title="Generate demo stream with specified characteristics"
-              >
-                <Sparkles className="h-4 w-4" />
-                Generate Demo Data
-                <ChevronDown className="h-3 w-3 opacity-70" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Generate demo stream</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="end" className="min-w-[220px]">
-          <DropdownMenuItem onClick={() => generateDemoData('new_stream')}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            New Stream
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => generateDemoData('yield_crossing')}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Stream with Yield Crossing Alert
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => generateDemoData('ffch')}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Stream with FFCH Alert
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => generateDemoData('staged')}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Staged Stream
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => generateDemoData('unconfigured')}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Unconfigured Stream
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <div className="h-6 w-px bg-border shrink-0" />
-
       <BatchMaxLevelsPopover />
 
     </>
@@ -322,25 +319,25 @@ export function Toolbar() {
         </>
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuLabel>Generate Demo Data</DropdownMenuLabel>
+      <DropdownMenuLabel>Test Only - Demo Data</DropdownMenuLabel>
       <DropdownMenuItem onClick={() => generateDemoData('new_stream')}>
-        <Sparkles className="h-4 w-4" />
+        <FlaskConical className="h-4 w-4" />
         New Stream
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => generateDemoData('yield_crossing')}>
-        <Sparkles className="h-4 w-4" />
+        <FlaskConical className="h-4 w-4" />
         Stream with Yield Crossing Alert
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => generateDemoData('ffch')}>
-        <Sparkles className="h-4 w-4" />
+        <FlaskConical className="h-4 w-4" />
         Stream with FFCH Alert
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => generateDemoData('staged')}>
-        <Sparkles className="h-4 w-4" />
+        <FlaskConical className="h-4 w-4" />
         Staged Stream
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => generateDemoData('unconfigured')}>
-        <Sparkles className="h-4 w-4" />
+        <FlaskConical className="h-4 w-4" />
         Unconfigured Stream
       </DropdownMenuItem>
       <DropdownMenuSeparator />
@@ -464,6 +461,9 @@ export function Toolbar() {
       
       {/* Launch Progress Popover - rendered via portal */}
       <LaunchProgressPopover />
+      
+      {/* Pause Progress Popover - rendered via portal */}
+      <PauseProgressPopover />
     </>
   );
 }

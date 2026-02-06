@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useEffect } from 'react';
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel } from '../../lib/utils';
 
@@ -10,6 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
 import { StatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
@@ -151,16 +152,39 @@ function ManualBidAskInputs({
   );
 }
 
+/** Format timestamp for display in tooltip */
+function formatTimestamp(isoString?: string): string {
+  if (!isoString) return 'No timestamp';
+  const date = new Date(isoString);
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
 /** Read-only Live Bid/Ask display when connected to QF price source */
 function LiveBidAskDisplay({
   bidValue,
   askValue,
+  bidTimestamp,
+  askTimestamp,
   formatNumber,
 }: {
   bidValue: number;
   askValue: number;
+  bidTimestamp?: string;
+  askTimestamp?: string;
   formatNumber: (n: number, d?: number) => string;
 }) {
+  // Use current time as fallback if no timestamp provided (for backwards compatibility)
+  const effectiveBidTimestamp = bidTimestamp || new Date().toISOString();
+  const effectiveAskTimestamp = askTimestamp || new Date().toISOString();
+  
   return (
     <div className="flex items-center gap-4" role="group" aria-label="Live price source">
       <div className="flex items-center gap-2">
@@ -170,6 +194,14 @@ function LiveBidAskDisplay({
         <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-bid bg-muted/30 rounded border border-border">
           {bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-'}
         </span>
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Clock className="h-3 w-3 text-gray-500 shrink-0" aria-label="Bid timestamp" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {formatTimestamp(effectiveBidTimestamp)}
+          </TooltipContent>
+        </Tooltip>
       </div>
       <div className="flex items-center gap-2">
         <label className="text-[10px] font-medium text-live-ask uppercase tracking-wider shrink-0">
@@ -178,6 +210,14 @@ function LiveBidAskDisplay({
         <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-ask bg-muted/30 rounded border border-border">
           {askValue != null && askValue !== 0 ? formatNumber(askValue) : '-'}
         </span>
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Clock className="h-3 w-3 text-gray-500 shrink-0" aria-label="Ask timestamp" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {formatTimestamp(effectiveAskTimestamp)}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );
@@ -573,6 +613,8 @@ interface ExpandedLevelsTableProps {
   stream: StreamSet;
   bidValue: number;
   askValue: number;
+  bidTimestamp?: string;
+  askTimestamp?: string;
   updateStreamSet: (id: string, updates: Partial<StreamSet>) => void;
   formatNumber: (n: number, d?: number) => string;
   launchStream: (id: string) => Promise<void>;
@@ -589,6 +631,8 @@ function ExpandedLevelsTable({
   stream,
   bidValue,
   askValue,
+  bidTimestamp,
+  askTimestamp,
   updateStreamSet,
   formatNumber,
   launchStream,
@@ -788,6 +832,8 @@ function ExpandedLevelsTable({
             <LiveBidAskDisplay
               bidValue={bidValue}
               askValue={askValue}
+              bidTimestamp={bidTimestamp}
+              askTimestamp={askTimestamp}
               formatNumber={formatNumber}
             />
           )}
@@ -853,40 +899,48 @@ function ExpandedLevelsTable({
               Bid Levels ({bidActiveCount})
             </span>
             <div className="flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  launchAllLevels(stream.id, 'bid');
-                }}
-                disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                className="h-5 w-5 text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                title="Launch all bid levels"
-              >
-                {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Play className="h-3 w-3" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pauseAllLevels(stream.id, 'bid');
-                }}
-                disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                title="Pause all bid levels"
-              >
-                {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Pause className="h-3 w-3" />
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      launchAllLevels(stream.id, 'bid');
+                    }}
+                    disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                    className="h-5 w-5 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                  >
+                    {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Launch all bid levels</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pauseAllLevels(stream.id, 'bid');
+                    }}
+                    disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                    className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  >
+                    {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Pause className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Pause all bid levels</TooltipContent>
+              </Tooltip>
               <label className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
                 <span>MAX Lvls</span>
                 <input
@@ -965,40 +1019,48 @@ function ExpandedLevelsTable({
               Ask Levels ({askActiveCount})
             </span>
             <div className="flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  launchAllLevels(stream.id, 'ask');
-                }}
-                disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
-                className="h-5 w-5 text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                title="Launch all ask levels"
-              >
-                {launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Play className="h-3 w-3" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pauseAllLevels(stream.id, 'ask');
-                }}
-                disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
-                className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                title="Pause all ask levels"
-              >
-                {launchingLevelKeys.has(`${stream.id}-ask-pause-all`) ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Pause className="h-3 w-3" />
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      launchAllLevels(stream.id, 'ask');
+                    }}
+                    disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                    className="h-5 w-5 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                  >
+                    {launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Launch all ask levels</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pauseAllLevels(stream.id, 'ask');
+                    }}
+                    disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                    className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  >
+                    {launchingLevelKeys.has(`${stream.id}-ask-pause-all`) ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Pause className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Pause all ask levels</TooltipContent>
+              </Tooltip>
               <label className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
                 <span>MAX Lvls</span>
                 <input
@@ -1214,32 +1276,36 @@ function LevelRow({
             aria-hidden
           />
         )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isLevelActive) pauseLevel(streamId, side, levelIndex);
-            else if (canLaunch) launchLevel(streamId, side, levelIndex);
-          }}
-          disabled={isLaunching || (!isLevelActive && !canLaunch)}
-          className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
-          title={
-            isLevelActive
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isLevelActive) pauseLevel(streamId, side, levelIndex);
+                else if (canLaunch) launchLevel(streamId, side, levelIndex);
+              }}
+              disabled={isLaunching || (!isLevelActive && !canLaunch)}
+              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
+            >
+              {isLaunching ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isLevelActive ? (
+                <Pause className="h-3 w-3" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isLevelActive
               ? 'Pause level'
               : !canLaunch
                 ? (maxLvls === 0 ? 'MAX Lvls is 0' : level.levelNumber > maxLvls ? `Level exceeds MAX Lvls (${maxLvls})` : `MAX Lvls limit reached (${maxLvls})`)
-                : 'Launch level'
-          }
-        >
-          {isLaunching ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : isLevelActive ? (
-            <Pause className="h-3 w-3" />
-          ) : (
-            <Play className="h-3 w-3" />
-          )}
-        </Button>
+                : 'Launch level'}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </td>
   );
@@ -1340,10 +1406,22 @@ export function StreamRow({ stream }: StreamRowProps) {
     launchingLevelKeys,
     missingPriceSourceStreamIds,
     clearMissingPriceSourceError,
+    launchProgress,
+    pauseProgress,
   } = useStreamStore();
 
   const isExpanded = expandedStreamIds.has(stream.id);
   const isSelected = selectedStreamId === stream.id;
+
+  // Check if stream is currently being processed (launch, pause, or batch operation)
+  const isLaunching = launchingStreamIds.has(stream.id);
+  const isInLaunchBatch = launchProgress?.items.some(
+    (item) => item.streamId === stream.id && item.status === 'processing'
+  ) ?? false;
+  const isInPauseBatch = pauseProgress?.items.some(
+    (item) => item.streamId === stream.id && item.status === 'processing'
+  ) ?? false;
+  const isStreamProcessing = isLaunching || isInLaunchBatch || isInPauseBatch;
 
   // Best/innermost active level per side for collapsed row (L1 preferred, then L2, L3... if L1 inactive)
   const bidBestLevel = getBestActiveLevel(stream.bid.spreadMatrix, stream.bid);
@@ -1524,7 +1602,7 @@ export function StreamRow({ stream }: StreamRowProps) {
               <ChevronRight className="h-3 w-3" />
             )}
           </Button>
-          <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} />
+          <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} isLoading={isStreamProcessing} />
           {stream.hasStagingChanges && (
             <Badge
               variant="staging-indicator"
@@ -1719,51 +1797,63 @@ export function StreamRow({ stream }: StreamRowProps) {
             </div>
           )}
           {stream.state !== 'cancelled' && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (isGlobalToggleLoading) return;
-                if (hasAnyActiveLevel) {
-                  await pauseAllLevels(stream.id, 'bid');
-                  await pauseAllLevels(stream.id, 'ask');
-                } else {
-                  await launchAllLevels(stream.id, 'bid');
-                  await launchAllLevels(stream.id, 'ask');
-                }
-              }}
-              disabled={isGlobalToggleLoading}
-              className={cn(
-                'h-6 w-6 shrink-0 min-w-[24px]',
-                hasAnyActiveLevel
-                  ? 'text-red-400 hover:text-red-300 hover:bg-red-400/10'
-                  : 'text-green-400 hover:text-green-300 hover:bg-green-400/10'
-              )}
-              title={hasAnyActiveLevel ? 'Pause all levels (Bid + Ask)' : 'Launch all levels (Bid + Ask)'}
-            >
-              {isGlobalToggleLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : hasAnyActiveLevel ? (
-                <Pause className="h-4 w-4" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (isGlobalToggleLoading) return;
+                    if (hasAnyActiveLevel) {
+                      await pauseAllLevels(stream.id, 'bid');
+                      await pauseAllLevels(stream.id, 'ask');
+                    } else {
+                      await launchAllLevels(stream.id, 'bid');
+                      await launchAllLevels(stream.id, 'ask');
+                    }
+                  }}
+                  disabled={isGlobalToggleLoading}
+                  className={cn(
+                    'h-6 w-6 shrink-0 min-w-[24px]',
+                    hasAnyActiveLevel
+                      ? 'text-red-400 hover:text-red-300 hover:bg-red-400/10'
+                      : 'text-green-400 hover:text-green-300 hover:bg-green-400/10'
+                  )}
+                >
+                  {isGlobalToggleLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : hasAnyActiveLevel ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {hasAnyActiveLevel ? 'Pause stream' : 'Launch stream'}
+              </TooltipContent>
+            </Tooltip>
           )}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteStreamSet(stream.id);
-            }}
-            disabled={hasAnyActiveLevel}
-            className="h-6 w-6 shrink-0 min-w-[24px] text-muted-foreground hover:bg-destructive hover:text-destructive-foreground disabled:hover:bg-transparent"
-            title={hasAnyActiveLevel ? 'Pause the stream to remove it' : 'Remove stream set'}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteStreamSet(stream.id);
+                }}
+                disabled={hasAnyActiveLevel}
+                className="h-6 w-6 shrink-0 min-w-[24px] text-muted-foreground hover:bg-destructive hover:text-destructive-foreground disabled:hover:bg-transparent"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasAnyActiveLevel ? 'Pause the stream to remove it' : 'Remove stream'}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -1812,6 +1902,8 @@ export function StreamRow({ stream }: StreamRowProps) {
           stream={stream}
           bidValue={bidValue}
           askValue={askValue}
+          bidTimestamp={selectedFeed?.bidTimestamp}
+          askTimestamp={selectedFeed?.askTimestamp}
           updateStreamSet={updateStreamSet}
           formatNumber={formatNumber}
           launchStream={launchStream}

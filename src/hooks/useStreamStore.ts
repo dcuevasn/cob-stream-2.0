@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem } from '../types/streamSet';
+import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem, PauseProgressState, PauseProgressItem } from '../types/streamSet';
 import { generateInitialStreamSets, generateRandomDemoData, generateStreamQuoteFeeds, generateAdditiveDemoStreams, type DemoStreamType } from '../mocks/mockData';
 import { simulateLaunch, simulateStopStream, validateStreamSet } from '../mocks/mockValidations';
 import { stagingConfigEquals } from '../lib/utils';
@@ -23,6 +23,9 @@ interface StreamStore {
   
   /** Launch progress state for batch launch operations */
   launchProgress: LaunchProgressState | null;
+  
+  /** Pause progress state for batch pause operations */
+  pauseProgress: PauseProgressState | null;
 
   // Actions
   setStreamSets: (streamSets: StreamSet[]) => void;
@@ -79,6 +82,10 @@ interface StreamStore {
   // Launch progress actions
   launchAllWithProgress: (variant: 'all' | 'bid' | 'ask', securityType?: SecurityType) => Promise<void>;
   dismissLaunchProgress: () => void;
+  
+  // Pause progress actions
+  pauseAllWithProgress: (variant: 'all' | 'bid' | 'ask', securityType?: SecurityType) => Promise<void>;
+  dismissPauseProgress: () => void;
   
   // Computed
   getFilteredStreamSets: () => StreamSet[];
@@ -180,6 +187,7 @@ export const useStreamStore = create<StreamStore>()(
       preferences: defaultPreferences,
       accordionOpenSections: ['M Bono', 'UDI Bono', 'Cetes', 'Corporate MXN', 'Corporate UDI'],
       launchProgress: null,
+      pauseProgress: null,
 
       setStreamSets: (streamSets) => set({ streamSets }),
 
@@ -1475,6 +1483,158 @@ export const useStreamStore = create<StreamStore>()(
       dismissLaunchProgress: () => {
         set({ launchProgress: null });
       },
+      
+      // Pause progress actions
+      pauseAllWithProgress: async (variant, securityType) => {
+        const { getFilteredStreamSets, updateStreamSet } = get();
+        let streams = getFilteredStreamSets();
+        
+        // Filter by security type if provided (for section-specific pauses in All view)
+        if (securityType) {
+          streams = streams.filter((s) => s.securityType === securityType);
+        }
+        
+        // Filter to pausable streams (not cancelled/unconfigured, and have active levels)
+        const pausableStreams = streams.filter((ss) => {
+          if (ss.state === 'cancelled' || ss.state === 'unconfigured') return false;
+          const hasActiveBid = ss.bid.spreadMatrix.some((l) => l.isActive);
+          const hasActiveAsk = ss.ask.spreadMatrix.some((l) => l.isActive);
+          // For bid/ask variant, only include streams with active levels on that side
+          if (variant === 'bid') return hasActiveBid;
+          if (variant === 'ask') return hasActiveAsk;
+          return hasActiveBid || hasActiveAsk;
+        });
+        
+        if (pausableStreams.length === 0) return;
+        
+        // Initialize progress state with order counts based on active levels and variant
+        const progressItems: PauseProgressItem[] = pausableStreams.map((s) => {
+          const activeBidCount = s.bid.spreadMatrix.filter((l) => l.isActive).length;
+          const activeAskCount = s.ask.spreadMatrix.filter((l) => l.isActive).length;
+          // Calculate expected order counts based on pause variant
+          const bidCount = (variant === 'all' || variant === 'bid') ? activeBidCount : 0;
+          const askCount = (variant === 'all' || variant === 'ask') ? activeAskCount : 0;
+          return {
+            streamId: s.id,
+            streamName: s.securityAlias || s.securityName,
+            status: 'pending' as const,
+            bidCount,
+            askCount,
+            securityType: s.securityType,
+          };
+        });
+        
+        set({
+          pauseProgress: {
+            isActive: true,
+            items: progressItems,
+            completedCount: 0,
+            totalCount: pausableStreams.length,
+            variant,
+            startTime: Date.now(),
+          },
+        });
+        
+        // Process streams in small batches (2-3 at a time) for smooth animation
+        const BATCH_SIZE = 2;
+        const STAGGER_DELAY = 100; // ms between starting each stream in batch (faster than launch)
+        
+        for (let i = 0; i < pausableStreams.length; i += BATCH_SIZE) {
+          const batch = pausableStreams.slice(i, i + BATCH_SIZE);
+          
+          // Process batch with staggered starts for smoother animation
+          const batchPromises = batch.map(async (stream, batchIndex) => {
+            // Stagger the start of each stream in the batch
+            await new Promise((resolve) => setTimeout(resolve, batchIndex * STAGGER_DELAY));
+            
+            // Update to processing state
+            set((s) => {
+              if (!s.pauseProgress) return s;
+              const items = s.pauseProgress.items.map((item) =>
+                item.streamId === stream.id
+                  ? { ...item, status: 'processing' as const, startTime: Date.now() }
+                  : item
+              );
+              return { pauseProgress: { ...s.pauseProgress, items } };
+            });
+            
+            try {
+              // Small delay for visual feedback
+              await new Promise((resolve) => setTimeout(resolve, 80));
+              
+              // Determine which sides to pause based on variant
+              const pauseBid = variant === 'all' || variant === 'bid';
+              const pauseAsk = variant === 'all' || variant === 'ask';
+              
+              const pausedBidMatrix = stream.bid.spreadMatrix.map((l) => ({
+                ...l,
+                isActive: pauseBid ? false : l.isActive,
+              }));
+              const pausedAskMatrix = stream.ask.spreadMatrix.map((l) => ({
+                ...l,
+                isActive: pauseAsk ? false : l.isActive,
+              }));
+              
+              // Check if stream will be fully paused after this operation
+              const bidWillBeActive = pausedBidMatrix.some((l) => l.isActive);
+              const askWillBeActive = pausedAskMatrix.some((l) => l.isActive);
+              const willBePaused = !bidWillBeActive && !askWillBeActive;
+              
+              updateStreamSet(stream.id, {
+                state: willBePaused ? 'paused' : stream.state,
+                bid: {
+                  ...stream.bid,
+                  isActive: bidWillBeActive,
+                  state: pauseBid ? 'paused' : stream.bid.state,
+                  spreadMatrix: pausedBidMatrix,
+                },
+                ask: {
+                  ...stream.ask,
+                  isActive: askWillBeActive,
+                  state: pauseAsk ? 'paused' : stream.ask.state,
+                  spreadMatrix: pausedAskMatrix,
+                },
+              }, { skipStaging: true });
+              
+              // Update to success state
+              set((s) => {
+                if (!s.pauseProgress) return s;
+                const items = s.pauseProgress.items.map((item) =>
+                  item.streamId === stream.id
+                    ? { ...item, status: 'success' as const, endTime: Date.now() }
+                    : item
+                );
+                const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                return { pauseProgress: { ...s.pauseProgress, items, completedCount } };
+              });
+            } catch (err) {
+              // Handle unexpected errors
+              set((s) => {
+                if (!s.pauseProgress) return s;
+                const items = s.pauseProgress.items.map((item) =>
+                  item.streamId === stream.id
+                    ? { ...item, status: 'error' as const, error: 'Unexpected error', endTime: Date.now() }
+                    : item
+                );
+                const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                return { pauseProgress: { ...s.pauseProgress, items, completedCount } };
+              });
+            }
+          });
+          
+          // Wait for batch to complete before starting next batch
+          await Promise.all(batchPromises);
+        }
+        
+        // Mark pause progress as complete (stays visible until user dismisses)
+        set((s) => ({
+          pauseProgress: s.pauseProgress ? { ...s.pauseProgress, isActive: false } : null,
+        }));
+      },
+      
+      dismissPauseProgress: () => {
+        set({ pauseProgress: null });
+      },
 
       resetState: () => {
         set({
@@ -1485,6 +1645,7 @@ export const useStreamStore = create<StreamStore>()(
           searchQuery: '',
           isLoading: false,
           launchProgress: null,
+          pauseProgress: null,
         });
       },
 

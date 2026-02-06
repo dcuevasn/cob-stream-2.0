@@ -107,11 +107,18 @@ export function generateStreamQuoteFeeds(_baseYield?: number): StreamQuoteFeed[]
       ask = Number((bid - 0.001).toFixed(QUOTE_FEED_PRECISION));
     }
 
+    // Generate random timestamps within the last 5 minutes (bid and ask may differ slightly)
+    const now = Date.now();
+    const bidOffset = Math.floor(Math.random() * 5 * 60 * 1000); // 0-5 minutes ago
+    const askOffset = Math.floor(Math.random() * 5 * 60 * 1000); // 0-5 minutes ago
+
     feeds.push({
       feedId: `QF-${i}`,
       feedName: `QF-${i}`,
       bid,
       ask,
+      bidTimestamp: new Date(now - bidOffset).toISOString(),
+      askTimestamp: new Date(now - askOffset).toISOString(),
     });
   }
 

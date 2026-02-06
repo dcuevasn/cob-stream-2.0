@@ -1,4 +1,4 @@
-import { Circle, AlertTriangle, Settings, XCircle } from 'lucide-react';
+import { Circle, AlertTriangle, Settings, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { StreamState } from '../../types/streamSet';
 import {
@@ -12,6 +12,8 @@ interface StatusBadgeProps {
   haltDetails?: string;
   className?: string;
   showLabel?: boolean;
+  /** Show loading spinner instead of status icon (during launch/pause operations) */
+  isLoading?: boolean;
 }
 
 const stateConfig: Record<StreamState, {
@@ -62,13 +64,15 @@ const stateConfig: Record<StreamState, {
   },
 };
 
-export function StatusBadge({ state, haltDetails, className, showLabel = false }: StatusBadgeProps) {
+export function StatusBadge({ state, haltDetails, className, showLabel = false, isLoading = false }: StatusBadgeProps) {
   const config = stateConfig[state];
   const Icon = config.icon;
 
   const badge = (
     <div className={cn('flex items-center gap-1.5', className)}>
-      {state === 'active' ? (
+      {isLoading ? (
+        <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+      ) : state === 'active' ? (
         <span className={cn('w-2 h-2 rounded-full pulse-active', config.bgColor)} />
       ) : config.useCircle ? (
         <span className={cn('w-2 h-2 rounded-full', config.bgColor)} />
@@ -76,7 +80,9 @@ export function StatusBadge({ state, haltDetails, className, showLabel = false }
         <Icon className={cn('h-4 w-4', config.color)} />
       )}
       {showLabel && (
-        <span className={cn('text-xs', config.color)}>{config.label}</span>
+        <span className={cn('text-xs', config.color)}>
+          {isLoading ? 'Processing...' : config.label}
+        </span>
       )}
     </div>
   );
