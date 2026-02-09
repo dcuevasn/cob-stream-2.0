@@ -64,6 +64,7 @@ function ManualBidAskInputs({
   const commitBid = useCallback(() => {
     const n = parseFloat(bidInput);
     if (!isNaN(n) && n >= 0) {
+      if (!isLevelValueStaged(n, bidVal)) return;
       updateStreamSet(stream.id, {
         referencePrice: {
           ...stream.referencePrice,
@@ -81,6 +82,7 @@ function ManualBidAskInputs({
   const commitAsk = useCallback(() => {
     const n = parseFloat(askInput);
     if (!isNaN(n) && n >= 0) {
+      if (!isLevelValueStaged(n, askVal)) return;
       updateStreamSet(stream.id, {
         referencePrice: {
           ...stream.referencePrice,
@@ -597,13 +599,12 @@ function LevelCellInput({
       onKeyDown={onKeyDown}
       onFocus={(e) => e.target.select()}
       className={cn(
-        'w-full min-w-0 h-6 px-1 text-[11px] tabular-nums rounded border border-transparent bg-background/50',
-        'focus:border-border focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-0',
-        'hover:bg-muted/50 transition-colors',
-        side === 'bid' && 'focus:border-green-500/50 focus:ring-green-500/30',
-        side === 'ask' && 'focus:border-red-500/50 focus:ring-red-500/30',
+        'relative z-0 box-border w-full min-w-0 h-6 px-1 text-[11px] tabular-nums rounded-none border border-transparent bg-transparent shadow-none appearance-none',
+        'focus:z-20 focus:outline-none focus:bg-blue-500/10 focus:text-white',
+        'focus:border-blue-500 focus:ring-1 focus:ring-inset focus:ring-blue-500/60 focus:ring-offset-0',
+        'transition-colors',
         // Blue highlight for staged/changed values (readable on dark background)
-        isStaged && 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+        isStaged && 'text-blue-400 bg-blue-500/10 ring-1 ring-inset ring-blue-500/30',
         className
       )}
       {...props}
@@ -752,6 +753,7 @@ function ExpandedLevelsTable({
   const notionalToggleLabel = getNotionalToggleLabel(stream.securityType);
   const bidActiveCount = getActiveLevelCount(stream.bid.spreadMatrix, stream.bid);
   const askActiveCount = getActiveLevelCount(stream.ask.spreadMatrix, stream.ask);
+  const priceAndVolumeSectionClassName = 'flex items-center justify-between gap-2 mb-2 flex-wrap';
 
   // Check for yield crossing: ask level 1 > bid level 1
   // Find level 1 (index 0) or closest active level
@@ -764,9 +766,10 @@ function ExpandedLevelsTable({
   return (
     <div
       className={cn(
-        'px-2 pb-2 pt-2',
+        'pt-0',
         'bg-muted/20'
       )}
+      style={{ paddingLeft: '12px', paddingRight: '12px', paddingBottom: '12px' }}
       onClick={(e) => e.stopPropagation()}
     >
       {stream.hasStagingChanges && (
@@ -821,7 +824,12 @@ function ExpandedLevelsTable({
         </div>
       )}
       {/* Manual Bid/Ask or Live Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
-      <div className="flex items-center justify-between gap-2 mb-2 py-2 flex-wrap" role="group" aria-label="Price and volume settings">
+      <div
+        className={priceAndVolumeSectionClassName}
+        style={{ padding: '12px' }}
+        role="group"
+        aria-label="Price and volume settings"
+      >
         <div className="flex items-center gap-2 flex-wrap">
           {!isUdi && stream.selectedPriceSource === 'manual' && (
             <ManualBidAskInputs
@@ -976,11 +984,9 @@ function ExpandedLevelsTable({
               </div>
             </div>
             <div className="rounded border border-border/50">
-              <table className="w-full text-[11px] tabular-nums">
+              <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border/50">
-                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-10 whitespace-nowrap" aria-label="Level control" />
-                    <th className="text-left py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                     <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                       <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
                     </th>
@@ -988,6 +994,9 @@ function ExpandedLevelsTable({
                       <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
                     </th>
                     <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
+                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
+                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-4 whitespace-nowrap">S</th>
                   </tr>
                 </thead>
               <tbody>
@@ -1006,8 +1015,6 @@ function ExpandedLevelsTable({
                     launchLevel={launchLevel}
                     pauseLevel={pauseLevel}
                     launchingLevelKeys={launchingLevelKeys}
-                    controlPosition="left"
-                    stream={stream}
                     snapshot={stream.lastLaunchedSnapshot}
                   />
                 ))}
@@ -1016,7 +1023,7 @@ function ExpandedLevelsTable({
           </div>
           </div>
 
-          {/* Ask Levels - columns: Yield, Spread, Qty (mirrored) */}
+          {/* Ask Levels - mirrored: Status/Actions/L/Yield/Spread/Qty */}
           <div className="flex-1 min-w-[220px]">
             <div className="flex items-center justify-between gap-1 mb-1">
               <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider whitespace-nowrap">
@@ -1096,9 +1103,12 @@ function ExpandedLevelsTable({
             </div>
           </div>
           <div className="rounded border border-border/50">
-            <table className="w-full text-[11px] tabular-nums">
+            <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0">
               <thead>
                 <tr className="bg-muted/50 border-b border-border/50">
+                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-4 whitespace-nowrap">S</th>
+                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                   <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                     <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
@@ -1106,7 +1116,6 @@ function ExpandedLevelsTable({
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                     <BatchQtyHeader volumeLabel={volumeLabel} side="ask" stream={stream} onBatchApply={batchUpdateQty} />
                   </th>
-                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-10" aria-label="Level control" />
                 </tr>
               </thead>
               <tbody>
@@ -1125,8 +1134,6 @@ function ExpandedLevelsTable({
                     launchLevel={launchLevel}
                     pauseLevel={pauseLevel}
                     launchingLevelKeys={launchingLevelKeys}
-                    controlPosition="right"
-                    stream={stream}
                     snapshot={stream.lastLaunchedSnapshot}
                   />
                 ))}
@@ -1153,8 +1160,6 @@ interface LevelRowProps {
   launchLevel: (streamId: string, side: 'bid' | 'ask', levelIndex: number) => Promise<void>;
   pauseLevel: (streamId: string, side: 'bid' | 'ask', levelIndex: number) => void;
   launchingLevelKeys: Set<string>;
-  controlPosition: 'left' | 'right';
-  stream?: StreamSet; // For staging comparison
   snapshot?: StagingSnapshot; // For staging comparison
 }
 
@@ -1171,8 +1176,6 @@ function LevelRow({
   launchLevel,
   pauseLevel,
   launchingLevelKeys,
-  controlPosition,
-  stream,
   snapshot,
 }: LevelRowProps) {
   const onUpdate = side === 'bid' ? onUpdateBid : onUpdateAsk;
@@ -1205,8 +1208,12 @@ function LevelRow({
 
   const commitQty = () => {
     const n = parseInt(qtyInput.replace(/,/g, ''), 10);
-    if (!isNaN(n) && n >= 0) onUpdate({ quantity: n });
-    else setQtyInput(formatQuantityFull(level.quantity));
+    if (!isNaN(n) && n >= 0) {
+      if (!isLevelValueStaged(n, level.quantity, 0)) return;
+      onUpdate({ quantity: n });
+      return;
+    }
+    setQtyInput(formatQuantityFull(level.quantity));
   };
 
   const roundTo3Decimals = (n: number) => Math.round(n * 1000) / 1000;
@@ -1227,6 +1234,10 @@ function LevelRow({
     if (!isNaN(n)) {
       const rounded = roundTo3Decimals(n);
       const deltaBps = side === 'ask' ? -Math.abs(rounded) : rounded;
+      if (!isLevelValueStaged(deltaBps, level.deltaBps)) {
+        setSpreadInput(formatSpreadBps(level.deltaBps));
+        return;
+      }
       onUpdate({ deltaBps });
       setSpreadInput(formatSpreadBps(deltaBps));
     } else {
@@ -1248,7 +1259,10 @@ function LevelRow({
     const n = parseFloat(yieldInput);
     if (!isNaN(n)) {
       const deltaBps = (n - baseValue) * 100;
-      onUpdate({ deltaBps: side === 'ask' ? -Math.abs(deltaBps) : deltaBps });
+      const normalizedDelta = side === 'ask' ? -Math.abs(deltaBps) : deltaBps;
+      if (isLevelValueStaged(normalizedDelta, level.deltaBps)) {
+        onUpdate({ deltaBps: normalizedDelta });
+      }
     }
     setYieldInput(formatNumber(baseValue + level.deltaBps / 100));
   };
@@ -1267,68 +1281,71 @@ function LevelRow({
     setYieldInput(formatNumber(baseValue + level.deltaBps / 100));
   }, [level.quantity, level.deltaBps, baseValue, side, formatNumber]);
 
-  // Control cell - constant element sizes
-  const controlCell = (
-    <td className="py-0.5 px-1 w-10">
-      <div className="flex items-center justify-center gap-0.5">
-        {isLevelLoading ? (
-          <Loader2 className="h-2 w-2 animate-spin shrink-0 text-muted-foreground" aria-hidden />
-        ) : (
-          <span
-            className={cn(
-              'w-2 h-2 rounded-md shrink-0',
-              isLevelActive ? (side === 'bid' ? 'bg-[hsl(var(--status-active))]' : 'bg-red-400') : 'bg-muted-foreground/60'
-            )}
-            aria-hidden
-          />
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isLevelActive) pauseLevel(streamId, side, levelIndex);
-                else if (canLaunch) launchLevel(streamId, side, levelIndex);
-              }}
-              disabled={isLaunching || (!isLevelActive && !canLaunch)}
-              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
-            >
-              {isLaunching ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : isLevelActive ? (
-                <Pause className="h-3 w-3" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isLevelActive
-              ? 'Pause level'
-              : !canLaunch
-                ? (maxLvls === 0 ? 'MAX Lvls is 0' : level.levelNumber > maxLvls ? `Level exceeds MAX Lvls (${maxLvls})` : `MAX Lvls limit reached (${maxLvls})`)
-                : 'Launch level'}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+  const statusCell = (
+    <td className="py-0.5 px-1 w-4 text-center">
+      {isLevelLoading ? (
+        <Loader2 className="h-2 w-2 animate-spin shrink-0 text-muted-foreground inline-block" aria-hidden />
+      ) : (
+        <span
+          className={cn(
+            'w-2 h-2 rounded-md shrink-0 inline-block',
+            isLevelActive ? (side === 'bid' ? 'bg-[hsl(var(--status-active))]' : 'bg-red-400') : 'bg-muted-foreground/60'
+          )}
+          aria-hidden
+        />
+      )}
     </td>
   );
 
-  if (side === 'bid') {
+  const actionCell = (
+    <td className="py-0.5 px-1 w-8 text-center">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isLevelActive) pauseLevel(streamId, side, levelIndex);
+              else if (canLaunch) launchLevel(streamId, side, levelIndex);
+            }}
+            disabled={isLaunching || (!isLevelActive && !canLaunch)}
+            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
+          >
+            {isLaunching ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : isLevelActive ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {isLevelActive
+            ? 'Pause level'
+            : !canLaunch
+              ? (maxLvls === 0 ? 'MAX Lvls is 0' : level.levelNumber > maxLvls ? `Level exceeds MAX Lvls (${maxLvls})` : `MAX Lvls limit reached (${maxLvls})`)
+              : 'Launch level'}
+        </TooltipContent>
+      </Tooltip>
+    </td>
+  );
+
+  if (side === 'ask') {
     return (
       <tr className="border-b border-border/30 last:border-0 hover:bg-muted/30">
-        {controlPosition === 'left' && controlCell}
-        <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px]">L{level.levelNumber}</td>
-        <td className="py-0.5 px-1">
+        {statusCell}
+        {actionCell}
+        <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px] text-center">L{level.levelNumber}</td>
+        <td className="py-0.5 px-1 tabular-nums text-red-400/90">
           <LevelCellInput
-            value={qtyInput}
-            onChange={(v) => setQtyInput(v)}
-            onKeyDown={(e) => handleKeyDown(e, commitQty)}
-            onBlur={commitQty}
-            side="bid"
-            isStaged={isQtyStaged}
+            value={yieldInput}
+            onChange={handleYieldChange}
+            onKeyDown={(e) => handleKeyDown(e, commitYield)}
+            onBlur={commitYield}
+            side={side}
+            isStaged={isYieldStaged}
           />
         </td>
         <td className="py-0.5 px-1">
@@ -1337,37 +1354,34 @@ function LevelRow({
             onChange={handleSpreadChange}
             onKeyDown={(e) => handleKeyDown(e, commitSpread)}
             onBlur={commitSpread}
-            side="bid"
+            side={side}
             isStaged={isSpreadStaged}
           />
         </td>
-        <td className={cn('py-0.5 px-1 tabular-nums', side === 'bid' && 'text-green-400/90')}>
+        <td className="py-0.5 px-1">
           <LevelCellInput
-            value={yieldInput}
-            onChange={handleYieldChange}
-            onKeyDown={(e) => handleKeyDown(e, commitYield)}
-            onBlur={commitYield}
-            side="bid"
-            isStaged={isYieldStaged}
+            value={qtyInput}
+            onChange={(v) => setQtyInput(v)}
+            onKeyDown={(e) => handleKeyDown(e, commitQty)}
+            onBlur={commitQty}
+            side={side}
+            isStaged={isQtyStaged}
           />
         </td>
-        {controlPosition === 'right' && controlCell}
       </tr>
     );
   }
 
-  // ASK side - with sticky control cell on right
   return (
     <tr className="border-b border-border/30 last:border-0 hover:bg-muted/30">
-      {controlPosition === 'left' && controlCell}
-      <td className={cn('py-0.5 px-1 tabular-nums', side === 'ask' && 'text-red-400/90')}>
+      <td className="py-0.5 px-1">
         <LevelCellInput
-          value={yieldInput}
-          onChange={handleYieldChange}
-          onKeyDown={(e) => handleKeyDown(e, commitYield)}
-          onBlur={commitYield}
-          side="ask"
-          isStaged={isYieldStaged}
+          value={qtyInput}
+          onChange={(v) => setQtyInput(v)}
+          onKeyDown={(e) => handleKeyDown(e, commitQty)}
+          onBlur={commitQty}
+          side={side}
+          isStaged={isQtyStaged}
         />
       </td>
       <td className="py-0.5 px-1">
@@ -1376,21 +1390,23 @@ function LevelRow({
           onChange={handleSpreadChange}
           onKeyDown={(e) => handleKeyDown(e, commitSpread)}
           onBlur={commitSpread}
-          side="ask"
+          side={side}
           isStaged={isSpreadStaged}
         />
       </td>
-      <td className="py-0.5 px-1">
+      <td className="py-0.5 px-1 tabular-nums text-green-400/90">
         <LevelCellInput
-          value={qtyInput}
-          onChange={(v) => setQtyInput(v)}
-          onKeyDown={(e) => handleKeyDown(e, commitQty)}
-          onBlur={commitQty}
-          side="ask"
-          isStaged={isQtyStaged}
+          value={yieldInput}
+          onChange={handleYieldChange}
+          onKeyDown={(e) => handleKeyDown(e, commitYield)}
+          onBlur={commitYield}
+          side={side}
+          isStaged={isYieldStaged}
         />
       </td>
-      {controlPosition === 'right' && controlCell}
+      <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px] text-center">L{level.levelNumber}</td>
+      {actionCell}
+      {statusCell}
     </tr>
   );
 }
@@ -1680,11 +1696,13 @@ export function StreamRow({ stream }: StreamRowProps) {
           </span>
 
           {/* BID */}
-          {/* Show "-" when unconfigured */}
+          {/* Show "-" when unconfigured; blue highlight when yield changed via spread edit */}
           <span className={cn(
-            'text-right tabular-nums text-xs',
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (bidValue != null && bidValue !== 0 ? 'text-green-400' : 'text-muted-foreground')
+            (bidValue != null && bidValue !== 0
+              ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+              : 'text-muted-foreground')
           )}>
             {stream.state === 'unconfigured' ? '-' :
               (bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-')}
@@ -1713,11 +1731,13 @@ export function StreamRow({ stream }: StreamRowProps) {
           </span>
 
           {/* ASK */}
-          {/* Show "-" when unconfigured */}
+          {/* Show "-" when unconfigured; blue highlight when yield changed via spread edit */}
           <span className={cn(
-            'text-right tabular-nums text-xs',
+            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (askValue != null && askValue !== 0 ? 'text-red-400' : 'text-muted-foreground')
+            (askValue != null && askValue !== 0
+              ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+              : 'text-muted-foreground')
           )}>
             {stream.state === 'unconfigured' ? '-' :
               (askValue != null && askValue !== 0 ? formatNumber(askYield) : '-')}
