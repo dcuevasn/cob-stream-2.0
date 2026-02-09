@@ -4,6 +4,7 @@ import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from 
 import { getActiveLevelCount, getBestActiveLevel } from '../../lib/utils';
 
 import { useStreamStore } from '../../hooks/useStreamStore';
+import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
 import { StatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
+import { SpreadStepSettings } from './SpreadStepSettings';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
 import { CompactSelect, type CompactSelectOption } from '../ui/compact-select';
 import { STREAM_TABLE_COL_GRID, ACTIONS_COLUMN_WIDTH } from './StreamTableHeader';
@@ -337,8 +339,6 @@ function BatchQtyHeader({
   );
 }
 
-const SPREAD_INCREMENT = 0.1;
-
 /** Default spread values (bps) for Reset to Default: L1=0, L2=1, L3=4, L4=5, L5=6 */
 const DEFAULT_SPREADS_BPS = [0, 1, 2, 3, 4];
 
@@ -373,6 +373,7 @@ function BatchSpreadHeader({
   const [baseSpreads, setBaseSpreads] = useState<number[]>([]);
   const [adjustmentValue, setAdjustmentValue] = useState(0);
   const [inputStr, setInputStr] = useState('0');
+  const { stepSize } = useSpreadStepSize();
 
   useEffect(() => {
     if (open) {
@@ -421,12 +422,12 @@ function BatchSpreadHeader({
   };
 
   const handlePlus = () => {
-    const newVal = roundBps(adjustmentValue + SPREAD_INCREMENT);
+    const newVal = roundBps(adjustmentValue + stepSize);
     applyAdjustment(newVal);
   };
 
   const handleMinus = () => {
-    const newVal = roundBps(adjustmentValue - SPREAD_INCREMENT);
+    const newVal = roundBps(adjustmentValue - stepSize);
     applyAdjustment(newVal);
   };
 
@@ -502,7 +503,7 @@ function BatchSpreadHeader({
                 handleMinus();
               }}
               className="h-8 w-8 shrink-0 p-0"
-              aria-label="Decrease by 0.1 bps"
+              aria-label={`Decrease by ${stepSize} bps`}
             >
               <Minus className="h-3.5 w-3.5" />
             </Button>
@@ -535,12 +536,12 @@ function BatchSpreadHeader({
                 handlePlus();
               }}
               className="h-8 w-8 shrink-0 p-0"
-              aria-label="Increase by 0.1 bps"
+              aria-label={`Increase by ${stepSize} bps`}
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
-          {/* Action Buttons - Cancel Edits and Reset side-by-side */}
+          {/* Action Buttons - Cancel Edits, Reset, and Settings */}
           <div className="mt-2.5 flex items-center justify-end gap-2">
             <Button
               onClick={(e) => {
@@ -563,6 +564,7 @@ function BatchSpreadHeader({
               <RotateCcw className="h-2.5 w-2.5 shrink-0" />
               Reset
             </Button>
+            <SpreadStepSettings />
           </div>
         </div>
       </DropdownMenuContent>

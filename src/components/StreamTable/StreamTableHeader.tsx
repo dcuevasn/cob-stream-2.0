@@ -3,7 +3,9 @@ import { ChevronDown, Minus, Plus, RotateCcw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PriceSourceBatchPopover } from './PriceSourceBatchPopover';
 import { UnitBatchPopover } from './UnitBatchPopover';
+import { SpreadStepSettings } from './SpreadStepSettings';
 import { useStreamStore } from '../../hooks/useStreamStore';
+import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -18,9 +20,6 @@ export const STREAM_TABLE_COL_GRID =
 
 /** Width of the sticky actions column */
 export const ACTIONS_COLUMN_WIDTH = 'w-[60px]';
-
-/** Spread adjustment increment (bps) */
-const SPREAD_INCREMENT = 0.1;
 
 /** Round to 3 decimal places for bps values */
 function roundBps(n: number): number {
@@ -47,6 +46,7 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
   const [adjustmentValue, setAdjustmentValue] = useState(0);
   const [inputStr, setInputStr] = useState('0');
   const [affectedCount, setAffectedCount] = useState(0);
+  const { stepSize } = useSpreadStepSize();
   
   // Store original spreads when popover opens for Cancel Edits
   const originalSpreadsRef = useRef<Map<string, number[]>>(new Map());
@@ -108,12 +108,12 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
   };
 
   const handlePlus = () => {
-    const newVal = roundBps(adjustmentValue + SPREAD_INCREMENT);
+    const newVal = roundBps(adjustmentValue + stepSize);
     applyAdjustment(newVal);
   };
 
   const handleMinus = () => {
-    const newVal = roundBps(adjustmentValue - SPREAD_INCREMENT);
+    const newVal = roundBps(adjustmentValue - stepSize);
     applyAdjustment(newVal);
   };
 
@@ -188,7 +188,7 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
                 handleMinus();
               }}
               className="h-8 w-8 shrink-0 p-0"
-              aria-label="Decrease by 0.1 bps"
+              aria-label={`Decrease by ${stepSize} bps`}
             >
               <Minus className="h-3.5 w-3.5" />
             </Button>
@@ -221,13 +221,13 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
                 handlePlus();
               }}
               className="h-8 w-8 shrink-0 p-0"
-              aria-label="Increase by 0.1 bps"
+              aria-label={`Increase by ${stepSize} bps`}
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
           
-          {/* Action Buttons - Cancel Edits and Reset side-by-side */}
+          {/* Action Buttons - Cancel Edits, Reset, and Settings */}
           <div className="mt-2.5 flex items-center justify-end gap-2">
             <Button
               onClick={(e) => {
@@ -250,6 +250,7 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
               <RotateCcw className="h-2.5 w-2.5 shrink-0" />
               Reset
             </Button>
+            <SpreadStepSettings />
           </div>
         </div>
       </DropdownMenuContent>
