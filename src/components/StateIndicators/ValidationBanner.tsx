@@ -1,17 +1,67 @@
-import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Hand, Loader2, X, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
+import { useSettingsStore } from '../../hooks/useSettingsStore';
+import type { HaltReason } from '../../types/streamSet';
 
 interface ValidationBannerProps {
   message: string;
+  haltReason?: HaltReason;
   onDismiss?: () => void;
   onRelaunch?: () => void;
   isLaunching?: boolean;
   className?: string;
 }
 
+/** Get the context-aware icon for FFCH/yield_crossing halt reasons */
+function HaltIcon({ haltReason }: { haltReason?: HaltReason }) {
+  const autoRelaunchSettings = useSettingsStore((s) => s.autoRelaunchSettings);
+
+  if (haltReason === 'ffch') {
+    const autoEnabled = autoRelaunchSettings.autoRelaunchFFCH;
+    return autoEnabled ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Zap className="h-3.5 w-3.5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top">Auto-relaunch enabled: Stream will relaunch automatically when FFCH clears</TooltipContent>
+      </Tooltip>
+    ) : (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Hand className="h-3.5 w-3.5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top">Manual relaunch required: You must manually relaunch after FFCH clears</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (haltReason === 'yield_crossing') {
+    const autoEnabled = autoRelaunchSettings.autoRelaunchYieldCrossing;
+    return autoEnabled ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Zap className="h-3.5 w-3.5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top">Auto-relaunch enabled: Stream will relaunch automatically when yield crossing resolves</TooltipContent>
+      </Tooltip>
+    ) : (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Hand className="h-3.5 w-3.5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top">Manual relaunch required: You must manually relaunch after resolving yield crossing</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return <AlertTriangle className="h-3.5 w-3.5 shrink-0" />;
+}
+
 export function ValidationBanner({
   message,
+  haltReason,
   onDismiss,
   onRelaunch,
   isLaunching = false,
@@ -24,7 +74,7 @@ export function ValidationBanner({
         className
       )}
     >
-      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <HaltIcon haltReason={haltReason} />
       <span className="flex-1 min-w-0 truncate">{message}</span>
       {onRelaunch && (
         <Button

@@ -15,6 +15,7 @@ import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
 import { LaunchProgressPopover } from './LaunchProgressPopover';
 import { PauseProgressPopover } from './PauseProgressPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
+import { UserSettings } from './UserSettings';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { getActiveLevelCount } from '../../lib/utils';
 import { cn } from '../../lib/utils';
@@ -299,7 +300,8 @@ export function Toolbar() {
         </>
       )}
       <BatchMaxLevelsPopover />
-
+      <div className="h-6 w-px bg-border shrink-0" />
+      <UserSettings />
     </>
   );
 

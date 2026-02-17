@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel, getBestConfiguredLevel } from '../../lib/utils';
 
@@ -19,7 +19,35 @@ import { StatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
 import { SpreadStepSettings } from './SpreadStepSettings';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
-import { STREAM_TABLE_COL_GRID, ACTIONS_COLUMN_WIDTH } from './StreamTableHeader';
+import { ACTIONS_COLUMN_WIDTH, useTableGridStyle } from './StreamTableHeader';
+import { useSettingsStore } from '../../hooks/useSettingsStore';
+
+/** Yield Crossing Alert with context-aware icon based on auto-relaunch setting */
+function YieldCrossingAlert({ bidYield1, askYield1 }: { bidYield1: number; askYield1: number }) {
+  const autoRelaunch = useSettingsStore((s) => s.autoRelaunchSettings.autoRelaunchYieldCrossing);
+  const Icon = autoRelaunch ? Zap : Hand;
+  const tooltipText = autoRelaunch
+    ? 'Auto-relaunch enabled: Stream will relaunch automatically when yield crossing resolves'
+    : 'Manual relaunch required: You must manually relaunch after resolving yield crossing';
+
+  return (
+    <div
+      role="alert"
+      className="flex items-center gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[28px] h-[30px]"
+      style={{ paddingLeft: '8px', paddingRight: '8px' }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top">{tooltipText}</TooltipContent>
+      </Tooltip>
+      <span className="truncate shrink-0">
+        Yield Crossing: Ask value ({formatNumber(askYield1)}) exceeds Bid value ({formatNumber(bidYield1)}) at level 1
+      </span>
+    </div>
+  );
+}
 
 /** Helper: Check if a level value differs from snapshot (for staged highlighting) */
 function isLevelValueStaged(
@@ -759,18 +787,9 @@ function ExpandedLevelsTable({
           </div>
         </div>
       )}
-      {/* Yield Crossing Alert - appears when ask level 1 > bid level 1 */}
-      {hasYieldCrossing && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[28px] h-[30px]"
-          style={{ paddingLeft: '8px', paddingRight: '8px' }}
-        >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate shrink-0">
-            Yield Crossing: Ask value ({formatNumber(askYield1!)}) exceeds Bid value ({formatNumber(bidYield1!)}) at level 1
-          </span>
-        </div>
+      {/* Yield Crossing Alert - only show when NOT already displayed via ValidationBanner (halted with yield_crossing reason) */}
+      {hasYieldCrossing && !(stream.state === 'halted' && stream.haltReason === 'yield_crossing') && (
+        <YieldCrossingAlert bidYield1={bidYield1!} askYield1={askYield1!} />
       )}
       {/* Manual Bid/Ask or Live Bid/Ask; Volume mode - shown for all with type-specific labels */}
       <div
@@ -904,7 +923,7 @@ function ExpandedLevelsTable({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className={cn(
-                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:text-foreground',
                       stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
                     )}
                   />
@@ -1062,7 +1081,7 @@ function ExpandedLevelsTable({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className={cn(
-                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:text-foreground',
                       stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
                     )}
                   />
@@ -1404,6 +1423,8 @@ export function StreamRow({ stream }: StreamRowProps) {
   } = useStreamStore();
 
   const { defaultSpreads } = useDefaultSpreads();
+  const gridStyle = useTableGridStyle();
+  const vis = useSettingsStore((s) => s.columnVisibility);
 
   const isExpanded = expandedStreamIds.has(stream.id);
   const isSelected = selectedStreamId === stream.id;
@@ -1470,10 +1491,20 @@ export function StreamRow({ stream }: StreamRowProps) {
   const bidYield = bidValue + (bidBestLevel?.deltaBps || 0) / 100;
   const askYield = askValue + (askBestLevel?.deltaBps || 0) / 100;
 
-  /** Global status indicator: Active (green) if any level active; Paused (gray) when none. Halted/cancelled/unconfigured unchanged. */
+  // Yield crossing check for ValidationBanner descriptive message
+  const bidLevel1 = stream.bid.spreadMatrix[0];
+  const askLevel1 = stream.ask.spreadMatrix[0];
+  const bidYield1 = bidLevel1 ? bidValue + bidLevel1.deltaBps / 100 : null;
+  const askYield1 = askLevel1 ? askValue + askLevel1.deltaBps / 100 : null;
+  const hasYieldCrossing = bidYield1 !== null && askYield1 !== null && askYield1 > bidYield1;
+
+  /** Global status indicator: Active (green) if any level active; Paused (gray) when none.
+   *  For FFCH/yield_crossing halts, show active/paused based on level activity (alert banners handle the warning).
+   *  Other halts (user_stop, execution_error), cancelled, and unconfigured show their own state. */
   const hasAnyActiveLevel = bidActiveCount > 0 || askActiveCount > 0;
+  const isAlertHalt = stream.state === 'halted' && (stream.haltReason === 'ffch' || stream.haltReason === 'yield_crossing');
   const statusDisplayState: StreamState =
-    stream.state === 'halted' || stream.state === 'cancelled' || stream.state === 'unconfigured'
+    (stream.state === 'halted' && !isAlertHalt) || stream.state === 'cancelled' || stream.state === 'unconfigured'
       ? stream.state
       : hasAnyActiveLevel
         ? 'active'
@@ -1572,7 +1603,7 @@ export function StreamRow({ stream }: StreamRowProps) {
         }}
       >
         {/* Scrollable columns */}
-        <div className={cn('grid gap-2 px-4 py-2 items-center flex-1 min-w-0', STREAM_TABLE_COL_GRID)}>
+        <div className={cn('grid gap-2 px-4 py-2 items-center flex-1 min-w-0')} style={gridStyle}>
           {/* Expand/Status */}
           <div className="flex items-center gap-1 min-w-0">
             <Button
@@ -1591,21 +1622,19 @@ export function StreamRow({ stream }: StreamRowProps) {
               )}
             </Button>
             <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} isLoading={isStreamProcessing} />
-            {stream.hasStagingChanges && (
-              <Badge
-                variant="staging-indicator"
-                title="Staged changes (pending apply)"
-                aria-label="Staged changes (pending apply)"
-              >
-                S
-              </Badge>
-            )}
           </div>
 
-          {/* Name */}
+          {/* Name - color coded by state: yellow for alerts, blue for staged, default otherwise */}
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
-              <div className="truncate font-medium">
+              <div className={cn(
+                'truncate font-medium',
+                (stream.state === 'halted' || hasMissingPriceSourceError || hasYieldCrossing)
+                  ? 'text-yellow-500'
+                  : stream.hasStagingChanges
+                    ? 'text-blue-400'
+                    : undefined
+              )}>
                 {stream.securityAlias}
               </div>
             </TooltipTrigger>
@@ -1618,150 +1647,163 @@ export function StreamRow({ stream }: StreamRowProps) {
           </Tooltip>
 
           {/* Price Source / QF */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <PriceSourceCombobox
-              value={stream.state === 'unconfigured' ? undefined : (stream.selectedPriceSource || 'manual')}
-              quoteFeeds={stream.quoteFeeds ?? []}
-              onValueChange={handlePriceSourceChange}
-              placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
-              className={cn(isPriceSourceStaged && 'text-blue-400 bg-blue-500/10')}
-            />
-          </div>
+          {vis.priceSource && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <PriceSourceCombobox
+                value={stream.state === 'unconfigured' ? undefined : (stream.selectedPriceSource || 'manual')}
+                quoteFeeds={stream.quoteFeeds ?? []}
+                onValueChange={handlePriceSourceChange}
+                placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
+                className={cn(isPriceSourceStaged && 'text-blue-400 bg-blue-500/10')}
+              />
+            </div>
+          )}
 
           {/* BLVL - count of active bid levels */}
-          {/* Show count when active; "-" when stopped or unconfigured */}
-          <span className={cn(
-            'text-center tabular-nums text-xs',
-            stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' : (bidActiveCount > 0 ? bidActiveCount : '-')}
-          </span>
+          {vis.blvl && (
+            <span className={cn(
+              'text-center tabular-nums text-xs',
+              stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' : (bidActiveCount > 0 ? bidActiveCount : '-')}
+            </span>
+          )}
 
-          {/* BSIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
-          {/* Show "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0 
-              ? (isBidL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
-              : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              ((stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
-                ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
-                : '-')}
-          </span>
+          {/* BSIZ - L1 (innermost) level only */}
+          {vis.bsiz && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
+                ? (isBidL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+                : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                ((stream.bid.spreadMatrix[0]?.quantity ?? 0) > 0
+                  ? formatQuantity(stream.bid.spreadMatrix[0]!.quantity)
+                  : '-')}
+            </span>
+          )}
 
-          {/* BSP - spread from best bid level (active or configured) */}
-          {/* Show configured value even when stopped; "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            bidBestLevel?.deltaBps != null
-              ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
-              : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
-          </span>
+          {/* BSP - spread from best bid level */}
+          {vis.bsp && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              bidBestLevel?.deltaBps != null
+                ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+                : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
+            </span>
+          )}
 
-          {/* BID - calculated yield from best level (active or configured) */}
-          {/* Show configured value even when stopped; "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (bidValue != null && bidValue !== 0 && bidBestLevel
-              ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
-              : 'text-muted-foreground')
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (bidValue != null && bidValue !== 0 && bidBestLevel ? formatNumber(bidYield) : '-')}
-          </span>
+          {/* BID - calculated yield from best level */}
+          {vis.bid && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (bidValue != null && bidValue !== 0 && bidBestLevel
+                ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
+                : 'text-muted-foreground')
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (bidValue != null && bidValue !== 0 && bidBestLevel ? formatNumber(bidYield) : '-')}
+            </span>
+          )}
 
-          {/* Live Bid - softer tone for external market data */}
-          {/* Show "-" when unconfigured */}
-          <span className={cn(
-            'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
-          </span>
+          {/* Live Bid */}
+          {vis.liveBid && (
+            <span className={cn(
+              'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
+            </span>
+          )}
 
-          {/* Live Ask - softer tone for external market data */}
-          {/* Show "-" when unconfigured */}
-          <span className={cn(
-            'text-center px-1 py-0.5 rounded tabular-nums text-xs',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
-          </span>
+          {/* Live Ask */}
+          {vis.liveAsk && (
+            <span className={cn(
+              'text-center px-1 py-0.5 rounded tabular-nums text-xs',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
+            </span>
+          )}
 
-          {/* ASK - calculated yield from best level (active or configured) */}
-          {/* Show configured value even when stopped; "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (askValue != null && askValue !== 0 && askBestLevel
-              ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
-              : 'text-muted-foreground')
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (askValue != null && askValue !== 0 && askBestLevel ? formatNumber(askYield) : '-')}
-          </span>
+          {/* ASK - calculated yield from best level */}
+          {vis.ask && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (askValue != null && askValue !== 0 && askBestLevel
+                ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+                : 'text-muted-foreground')
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (askValue != null && askValue !== 0 && askBestLevel ? formatNumber(askYield) : '-')}
+            </span>
+          )}
 
-          {/* ASP - spread from best ask level (active or configured) */}
-          {/* Show configured value even when stopped; "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            askBestLevel?.deltaBps != null
-              ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
-              : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              (askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-')}
-          </span>
+          {/* ASP - spread from best ask level */}
+          {vis.asp && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              askBestLevel?.deltaBps != null
+                ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+                : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                (askBestLevel?.deltaBps != null ? formatSpreadBps(askBestLevel.deltaBps) : '-')}
+            </span>
+          )}
 
-          {/* ASIZ - L1 (innermost) level only; matches nested table, no 100x conversion */}
-          {/* Show "-" when unconfigured */}
-          <span className={cn(
-            'text-right tabular-nums text-xs px-1 py-0.5 rounded',
-            stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
-              ? (isAskL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
-              : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' :
-              ((stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
-                ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
-                : '-')}
-          </span>
+          {/* ASIZ - L1 (innermost) level only */}
+          {vis.asiz && (
+            <span className={cn(
+              'text-right tabular-nums text-xs px-1 py-0.5 rounded',
+              stream.state === 'unconfigured' ? 'text-muted-foreground' :
+              (stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
+                ? (isAskL1QtyStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
+                : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' :
+                ((stream.ask.spreadMatrix[0]?.quantity ?? 0) > 0
+                  ? formatQuantity(stream.ask.spreadMatrix[0]!.quantity)
+                  : '-')}
+            </span>
+          )}
 
           {/* ALVL - count of active ask levels */}
-          {/* Show count when active; "-" when stopped or unconfigured */}
-          <span className={cn(
-            'text-center tabular-nums text-xs',
-            stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' : (askActiveCount > 0 ? askActiveCount : '-')}
-          </span>
+          {vis.alvl && (
+            <span className={cn(
+              'text-center tabular-nums text-xs',
+              stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' : (askActiveCount > 0 ? askActiveCount : '-')}
+            </span>
+          )}
 
           {/* UNIT - volume mode */}
-          {/* Show "-" when unconfigured, blue highlight when staged */}
-          <span className={cn(
-            'text-center text-xs',
-            stream.state === 'unconfigured'
-              ? 'text-muted-foreground'
-              : stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode
-                ? 'text-blue-400 font-medium'
-                : 'text-muted-foreground'
-          )}>
-            {stream.state === 'unconfigured' ? '-' : (stream.priceMode === 'notional' ? 'MXN' : 'QTY')}
-          </span>
+          {vis.unit && (
+            <span className={cn(
+              'text-center text-xs',
+              stream.state === 'unconfigured'
+                ? 'text-muted-foreground'
+                : stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode
+                  ? 'text-blue-400 font-medium'
+                  : 'text-muted-foreground'
+            )}>
+              {stream.state === 'unconfigured' ? '-' : (stream.priceMode === 'notional' ? 'MXN' : 'QTY')}
+            </span>
+          )}
         </div>
 
         {/* Sticky Actions column */}
@@ -1885,7 +1927,12 @@ export function StreamRow({ stream }: StreamRowProps) {
       {stream.state === 'halted' && stream.haltDetails && (
         <div className="px-4 pb-2">
           <ValidationBanner
-            message={stream.haltDetails}
+            message={
+              stream.haltReason === 'yield_crossing' && hasYieldCrossing
+                ? `Yield Crossing: Ask value (${formatNumber(askYield1!)}) exceeds Bid value (${formatNumber(bidYield1!)}) at level 1`
+                : stream.haltDetails
+            }
+            haltReason={stream.haltReason}
             onRelaunch={() => launchStream(stream.id)}
             isLaunching={launchingStreamIds.has(stream.id)}
           />
