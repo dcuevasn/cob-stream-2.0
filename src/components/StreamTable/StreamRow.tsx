@@ -1,23 +1,24 @@
-import { useMemo, useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
-import { getActiveLevelCount, getBestActiveLevel } from '../../lib/utils';
+import { getActiveLevelCount, getBestActiveLevel, getBestConfiguredLevel } from '../../lib/utils';
 
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
+import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { PriceSourceCombobox } from './PriceSourceCombobox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
 import { StatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
 import { SpreadStepSettings } from './SpreadStepSettings';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
-import { CompactSelect, type CompactSelectOption } from '../ui/compact-select';
 import { STREAM_TABLE_COL_GRID, ACTIONS_COLUMN_WIDTH } from './StreamTableHeader';
 
 /** Helper: Check if a level value differs from snapshot (for staged highlighting) */
@@ -55,6 +56,7 @@ function ManualBidAskInputs({
   const snapshotAsk = snapshot?.referencePrice.manualAsk ?? snapshot?.referencePrice.value;
   const isBidStaged = snapshotBid !== undefined ? isLevelValueStaged(bidVal, snapshotBid) : false;
   const isAskStaged = snapshotAsk !== undefined ? isLevelValueStaged(askVal, snapshotAsk) : false;
+
 
   useEffect(() => {
     setBidInput(formatNumber(bidVal));
@@ -341,9 +343,6 @@ function BatchQtyHeader({
   );
 }
 
-/** Default spread values (bps) for Reset to Default: L1=0, L2=1, L3=4, L4=5, L5=6 */
-const DEFAULT_SPREADS_BPS = [0, 1, 2, 3, 4];
-
 function roundBps(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
@@ -362,13 +361,11 @@ function BatchSpreadHeader({
   stream,
   onBatchAdjust,
   onResetToDefault,
-  onCancelEdits,
 }: {
   side: 'bid' | 'ask';
   stream: StreamSet;
   onBatchAdjust: (side: 'bid' | 'ask', baseSpreads: number[], adjustmentBps: number) => void;
   onResetToDefault: (side: 'bid' | 'ask') => void;
-  onCancelEdits: (side: 'bid' | 'ask') => void;
 }) {
   const [open, setOpen] = useState(false);
   const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
@@ -376,6 +373,7 @@ function BatchSpreadHeader({
   const [adjustmentValue, setAdjustmentValue] = useState(0);
   const [inputStr, setInputStr] = useState('0');
   const { stepSize } = useSpreadStepSize();
+  const { defaultSpreads } = useDefaultSpreads();
 
   useEffect(() => {
     if (open) {
@@ -446,18 +444,12 @@ function BatchSpreadHeader({
 
   const handleResetToDefault = () => {
     const defaults = side === 'ask'
-      ? DEFAULT_SPREADS_BPS.map((bps) => -Math.abs(bps))
-      : [...DEFAULT_SPREADS_BPS];
+      ? defaultSpreads.ask
+      : defaultSpreads.bid;
     setBaseSpreads(defaults);
     setAdjustmentValue(0);
     setInputStr('0');
     onResetToDefault(side);
-  };
-
-  const handleCancelEdits = () => {
-    setAdjustmentValue(0);
-    setInputStr('0');
-    onCancelEdits(side);
   };
 
   return (
@@ -543,28 +535,18 @@ function BatchSpreadHeader({
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
-          {/* Action Buttons - Cancel Edits, Reset, and Settings */}
+          {/* Action Buttons - Reset and Settings */}
           <div className="mt-2.5 flex items-center justify-end gap-2">
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCancelEdits();
-              }}
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap"
-              aria-label="Cancel spread edits and revert to original values"
-            >
-              Cancel edits
-            </Button>
             <Button
               onClick={(e) => {
                 e.stopPropagation();
                 handleResetToDefault();
               }}
               className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap gap-1"
-              aria-label="Reset all level spreads to default values"
+              aria-label="Reset all level spreads to default spread values"
             >
               <RotateCcw className="h-2.5 w-2.5 shrink-0" />
-              Reset
+              Default spread
             </Button>
             <SpreadStepSettings />
           </div>
@@ -626,6 +608,7 @@ interface ExpandedLevelsTableProps {
   launchAllLevels: (streamId: string, side: 'bid' | 'ask') => Promise<void>;
   pauseAllLevels: (streamId: string, side: 'bid' | 'ask') => Promise<void>;
   revertStagingChanges: (id: string) => void;
+  deleteStreamSet: (id: string) => void;
   launchingStreamIds: Set<string>;
   launchingLevelKeys: Set<string>;
 }
@@ -644,9 +627,12 @@ function ExpandedLevelsTable({
   launchAllLevels,
   pauseAllLevels,
   revertStagingChanges,
+  deleteStreamSet,
   launchingStreamIds,
   launchingLevelKeys,
 }: ExpandedLevelsTableProps) {
+  const { defaultSpreads } = useDefaultSpreads();
+
   const updateBidLevel = useCallback(
     (levelIndex: number, updates: Partial<Level>) => {
       const newMatrix = stream.bid.spreadMatrix.map((l, i) =>
@@ -697,8 +683,8 @@ function ExpandedLevelsTable({
     (side: 'bid' | 'ask') => {
       const streamSide = side === 'bid' ? stream.bid : stream.ask;
       const defaultBps = side === 'ask'
-        ? DEFAULT_SPREADS_BPS.map((bps) => roundBps(-Math.abs(bps)))
-        : DEFAULT_SPREADS_BPS.map((bps) => roundBps(bps));
+        ? defaultSpreads.ask.map((bps) => roundBps(bps))
+        : defaultSpreads.bid.map((bps) => roundBps(bps));
       const newMatrix = streamSide.spreadMatrix.map((l, i) => ({
         ...l,
         deltaBps: defaultBps[i] ?? l.deltaBps,
@@ -707,45 +693,7 @@ function ExpandedLevelsTable({
         [side]: { ...streamSide, spreadMatrix: newMatrix },
       });
     },
-    [stream, updateStreamSet]
-  );
-
-  const batchCancelEditsSpread = useCallback(
-    (side: 'bid' | 'ask') => {
-      // Revert spreads to snapshot values (if available)
-      const snapshot = stream.lastLaunchedSnapshot;
-      if (!snapshot) return;
-      
-      const streamSide = side === 'bid' ? stream.bid : stream.ask;
-      const snapMatrix = side === 'bid' ? snapshot.bid.spreadMatrix : snapshot.ask.spreadMatrix;
-      
-      const revertedMatrix = streamSide.spreadMatrix.map((l, i) => {
-        const snapLevel = snapMatrix[i];
-        return snapLevel ? { ...l, deltaBps: snapLevel.deltaBps } : l;
-      });
-      
-      // Check if the other side has staging changes
-      const otherSide = side === 'bid' ? 'ask' : 'bid';
-      const otherSideData = stream[otherSide];
-      const otherSnapMatrix = side === 'bid' ? snapshot.ask.spreadMatrix : snapshot.bid.spreadMatrix;
-      const otherSideHasChanges = otherSideData.spreadMatrix.some((level, i) => {
-        const snapLevel = otherSnapMatrix[i];
-        return snapLevel && Math.abs(level.deltaBps - snapLevel.deltaBps) > 0.0001;
-      });
-      
-      // Also check other staging fields
-      const hasOtherStagingChanges = otherSideHasChanges ||
-        stream.selectedPriceSource !== snapshot.selectedPriceSource ||
-        stream.priceMode !== snapshot.priceMode ||
-        stream.bid.maxLvls !== snapshot.bid.maxLvls ||
-        stream.ask.maxLvls !== snapshot.ask.maxLvls;
-      
-      updateStreamSet(stream.id, {
-        [side]: { ...streamSide, spreadMatrix: revertedMatrix },
-        hasStagingChanges: hasOtherStagingChanges,
-      }, { skipStaging: true });
-    },
-    [stream, updateStreamSet]
+    [stream, updateStreamSet, defaultSpreads]
   );
 
   const isUdi = isUdiSecurity(stream.securityType);
@@ -753,6 +701,7 @@ function ExpandedLevelsTable({
   const notionalToggleLabel = getNotionalToggleLabel(stream.securityType);
   const bidActiveCount = getActiveLevelCount(stream.bid.spreadMatrix, stream.bid);
   const askActiveCount = getActiveLevelCount(stream.ask.spreadMatrix, stream.ask);
+  const hasAnyActiveLevel = bidActiveCount > 0 || askActiveCount > 0;
   const priceAndVolumeSectionClassName = 'flex items-center justify-between gap-2 mb-2 flex-wrap';
 
   // Check for yield crossing: ask level 1 > bid level 1
@@ -823,22 +772,22 @@ function ExpandedLevelsTable({
           </span>
         </div>
       )}
-      {/* Manual Bid/Ask or Live Bid/Ask - hidden for UDI; Volume mode - shown for all with type-specific labels */}
+      {/* Manual Bid/Ask or Live Bid/Ask; Volume mode - shown for all with type-specific labels */}
       <div
         className={priceAndVolumeSectionClassName}
-        style={{ padding: '12px' }}
+        style={{ paddingTop: '12px', paddingLeft: '12px', paddingBottom: '12px', paddingRight: '0' }}
         role="group"
         aria-label="Price and volume settings"
       >
         <div className="flex items-center gap-2 flex-wrap">
-          {!isUdi && stream.selectedPriceSource === 'manual' && (
+          {stream.selectedPriceSource === 'manual' && (
             <ManualBidAskInputs
               stream={stream}
               updateStreamSet={updateStreamSet}
               formatNumber={formatNumber}
             />
           )}
-          {!isUdi && stream.selectedPriceSource && stream.selectedPriceSource !== 'manual' && (
+          {stream.selectedPriceSource && stream.selectedPriceSource !== 'manual' && (
             <LiveBidAskDisplay
               bidValue={bidValue}
               askValue={askValue}
@@ -848,56 +797,77 @@ function ExpandedLevelsTable({
             />
           )}
         </div>
-        <div
-          role="tablist"
-          aria-label="Volume unit"
-          className="segmented-control h-6 shrink-0"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={stream.priceMode === 'quantity'}
-            data-active={stream.priceMode === 'quantity'}
-            onClick={(e) => {
-              e.stopPropagation();
-              updateStreamSet(stream.id, { priceMode: 'quantity' });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowRight' || e.key === ' ') {
-                e.preventDefault();
-                updateStreamSet(stream.id, { priceMode: 'notional' });
-              }
-            }}
-            className={cn(
-              'segmented-control-segment min-w-0',
-              'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
-            )}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <div
+            role="tablist"
+            aria-label="Volume unit"
+            className="segmented-control h-6 shrink-0"
           >
-            QTY
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={stream.priceMode === 'notional'}
-            data-active={stream.priceMode === 'notional'}
-            title={isUdi ? 'Trade Amount (UDI)' : 'Notional'}
-            onClick={(e) => {
-              e.stopPropagation();
-              updateStreamSet(stream.id, { priceMode: 'notional' });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowLeft' || e.key === ' ') {
-                e.preventDefault();
+            <button
+              type="button"
+              role="tab"
+              aria-selected={stream.priceMode === 'quantity'}
+              data-active={stream.priceMode === 'quantity'}
+              onClick={(e) => {
+                e.stopPropagation();
                 updateStreamSet(stream.id, { priceMode: 'quantity' });
-              }
-            }}
-            className={cn(
-              'segmented-control-segment min-w-0',
-              'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
-            )}
-          >
-            {notionalToggleLabel}
-          </button>
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' || e.key === ' ') {
+                  e.preventDefault();
+                  updateStreamSet(stream.id, { priceMode: 'notional' });
+                }
+              }}
+              className={cn(
+                'segmented-control-segment min-w-0',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
+              )}
+            >
+              QTY
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={stream.priceMode === 'notional'}
+              data-active={stream.priceMode === 'notional'}
+              title={isUdi ? 'Trade Amount (UDI)' : 'Notional'}
+              onClick={(e) => {
+                e.stopPropagation();
+                updateStreamSet(stream.id, { priceMode: 'notional' });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft' || e.key === ' ') {
+                  e.preventDefault();
+                  updateStreamSet(stream.id, { priceMode: 'quantity' });
+                }
+              }}
+              className={cn(
+                'segmented-control-segment min-w-0',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
+              )}
+            >
+              {notionalToggleLabel}
+            </button>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteStreamSet(stream.id);
+                }}
+                disabled={hasAnyActiveLevel}
+                className="h-6 w-6 shrink-0 min-w-[24px] text-muted-foreground hover:bg-destructive hover:text-destructive-foreground disabled:hover:bg-transparent"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {hasAnyActiveLevel ? 'Stop the stream to remove it' : 'Remove stream'}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -911,48 +881,6 @@ function ExpandedLevelsTable({
                 Bid Levels ({bidActiveCount})
               </span>
               <div className="flex items-center gap-0.5">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        launchAllLevels(stream.id, 'bid');
-                      }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                      className="h-5 w-5 text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                    >
-                      {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Play className="h-3 w-3" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Launch all bid levels</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        pauseAllLevels(stream.id, 'bid');
-                      }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                      className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    >
-                      {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Pause className="h-3 w-3" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Pause all bid levels</TooltipContent>
-                </Tooltip>
                 <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
                   <span>Max</span>
                   <input
@@ -976,11 +904,53 @@ function ExpandedLevelsTable({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className={cn(
-                      'w-8 h-5 px-0.5 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
                       stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
                     )}
                   />
                 </label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        launchAllLevels(stream.id, 'bid');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      className="h-6 w-6 shrink-0 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Launch all bid levels</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pauseAllLevels(stream.id, 'bid');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop all bid levels</TooltipContent>
+                </Tooltip>
               </div>
             </div>
             <div className="rounded border border-border/50">
@@ -991,7 +961,7 @@ function ExpandedLevelsTable({
                       <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
                     </th>
                     <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                      <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
+                      <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
                     </th>
                     <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                     <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
@@ -1026,82 +996,82 @@ function ExpandedLevelsTable({
           {/* Ask Levels - mirrored: Status/Actions/L/Yield/Spread/Qty */}
           <div className="flex-1 min-w-[220px]">
             <div className="flex items-center justify-between gap-1 mb-1">
+              <div className="flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        launchAllLevels(stream.id, 'ask');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                      className="h-6 w-6 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Launch all ask levels</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pauseAllLevels(stream.id, 'ask');
+                      }}
+                      disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                      className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-ask-pause-all`) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop all ask levels</TooltipContent>
+                </Tooltip>
+                <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                  <span>Max</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={stream.ask.maxLvls ?? 1}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const raw = e.target.value;
+                      const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
+                      updateStreamSet(stream.id, {
+                        ask: { ...stream.ask, maxLvls: v },
+                      });
+                    }}
+                    onKeyDown={(e) => {
+                      if (/^[0-5]$/.test(e.key)) {
+                        e.target.select();
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
+                      stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
+                    )}
+                  />
+                </label>
+              </div>
               <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider whitespace-nowrap">
-              Ask Levels ({askActiveCount})
-            </span>
-            <div className="flex items-center gap-0.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      launchAllLevels(stream.id, 'ask');
-                    }}
-                    disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
-                    className="h-5 w-5 text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                  >
-                    {launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Launch all ask levels</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      pauseAllLevels(stream.id, 'ask');
-                    }}
-                    disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
-                    className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  >
-                    {launchingLevelKeys.has(`${stream.id}-ask-pause-all`) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Pause className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Pause all ask levels</TooltipContent>
-              </Tooltip>
-              <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                <span>Max</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={5}
-                  value={stream.ask.maxLvls ?? 1}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    const raw = e.target.value;
-                    const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-                    updateStreamSet(stream.id, {
-                      ask: { ...stream.ask, maxLvls: v },
-                    });
-                  }}
-                  onKeyDown={(e) => {
-                    if (/^[0-5]$/.test(e.key)) {
-                      e.target.select();
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    'w-8 h-5 px-0.5 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring',
-                    stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
-                  )}
-                />
-              </label>
+                Ask Levels ({askActiveCount})
+              </span>
             </div>
-          </div>
           <div className="rounded border border-border/50">
             <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0">
               <thead>
@@ -1111,7 +1081,7 @@ function ExpandedLevelsTable({
                   <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                   <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                    <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} onCancelEdits={batchCancelEditsSpread} />
+                    <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
                   </th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
                     <BatchQtyHeader volumeLabel={volumeLabel} side="ask" stream={stream} onBatchApply={batchUpdateQty} />
@@ -1289,7 +1259,7 @@ function LevelRow({
         <span
           className={cn(
             'w-2 h-2 rounded-md shrink-0 inline-block',
-            isLevelActive ? (side === 'bid' ? 'bg-[hsl(var(--status-active))]' : 'bg-red-400') : 'bg-muted-foreground/60'
+            isLevelActive ? (side === 'bid' ? 'bg-[var(--status-active)]' : 'bg-red-400') : 'bg-muted-foreground/60'
           )}
           aria-hidden
         />
@@ -1323,7 +1293,7 @@ function LevelRow({
         </TooltipTrigger>
         <TooltipContent>
           {isLevelActive
-            ? 'Pause level'
+            ? 'Stop level'
             : !canLaunch
               ? (maxLvls === 0 ? 'MAX Lvls is 0' : level.levelNumber > maxLvls ? `Level exceeds MAX Lvls (${maxLvls})` : `MAX Lvls limit reached (${maxLvls})`)
               : 'Launch level'}
@@ -1433,6 +1403,8 @@ export function StreamRow({ stream }: StreamRowProps) {
     pauseProgress,
   } = useStreamStore();
 
+  const { defaultSpreads } = useDefaultSpreads();
+
   const isExpanded = expandedStreamIds.has(stream.id);
   const isSelected = selectedStreamId === stream.id;
 
@@ -1447,15 +1419,26 @@ export function StreamRow({ stream }: StreamRowProps) {
   const isStreamProcessing = isLaunching || isInLaunchBatch || isInPauseBatch;
 
   // Best/innermost active level per side for collapsed row (L1 preferred, then L2, L3... if L1 inactive)
-  const bidBestLevel = getBestActiveLevel(stream.bid.spreadMatrix, stream.bid);
-  const askBestLevel = getBestActiveLevel(stream.ask.spreadMatrix, stream.ask);
+  const bidBestActiveLevel = getBestActiveLevel(stream.bid.spreadMatrix, stream.bid);
+  const askBestActiveLevel = getBestActiveLevel(stream.ask.spreadMatrix, stream.ask);
+
+  // Best/innermost configured level per side (for display when stopped)
+  const bidBestConfiguredLevel = getBestConfiguredLevel(stream.bid.spreadMatrix);
+  const askBestConfiguredLevel = getBestConfiguredLevel(stream.ask.spreadMatrix);
+
+  const bidActiveCount = getActiveLevelCount(stream.bid.spreadMatrix, stream.bid);
+  const askActiveCount = getActiveLevelCount(stream.ask.spreadMatrix, stream.ask);
+
+  // Use active level when stream has active levels, otherwise use configured level
+  const bidBestLevel = bidActiveCount > 0 ? bidBestActiveLevel : bidBestConfiguredLevel;
+  const askBestLevel = askActiveCount > 0 ? askBestActiveLevel : askBestConfiguredLevel;
 
   // Helper: Check if collapsed row values are staged (for highlighting)
   const snapshot = stream.lastLaunchedSnapshot;
   const bidBestSnapshot = snapshot?.bid.spreadMatrix.find(l => l.levelNumber === bidBestLevel?.levelNumber);
   const askBestSnapshot = snapshot?.ask.spreadMatrix.find(l => l.levelNumber === askBestLevel?.levelNumber);
-  
-  const isBidQtyStaged = bidBestLevel && bidBestSnapshot 
+
+  const isBidQtyStaged = bidBestLevel && bidBestSnapshot
     ? isLevelValueStaged(bidBestLevel.quantity, bidBestSnapshot.quantity)
     : false;
   const isBidSpreadStaged = bidBestLevel && bidBestSnapshot
@@ -1487,9 +1470,6 @@ export function StreamRow({ stream }: StreamRowProps) {
   const bidYield = bidValue + (bidBestLevel?.deltaBps || 0) / 100;
   const askYield = askValue + (askBestLevel?.deltaBps || 0) / 100;
 
-  const bidActiveCount = getActiveLevelCount(stream.bid.spreadMatrix, stream.bid);
-  const askActiveCount = getActiveLevelCount(stream.ask.spreadMatrix, stream.ask);
-
   /** Global status indicator: Active (green) if any level active; Paused (gray) when none. Halted/cancelled/unconfigured unchanged. */
   const hasAnyActiveLevel = bidActiveCount > 0 || askActiveCount > 0;
   const statusDisplayState: StreamState =
@@ -1509,29 +1489,7 @@ export function StreamRow({ stream }: StreamRowProps) {
   /** Check if this stream has the missing price source error */
   const hasMissingPriceSourceError = missingPriceSourceStreamIds.has(stream.id);
 
-  // Build price source options: Manual + Quote Feeds group (QF-1, QF-2, …)
-  const priceSourceOptions = useMemo<CompactSelectOption[]>(() => {
-    const options: CompactSelectOption[] = [
-      { value: 'manual', label: 'Manual', group: '' },
-    ];
-
-    const feeds = stream.quoteFeeds ?? [];
-    if (feeds.length > 0) {
-      feeds.forEach((feed) => {
-        options.push({
-          value: feed.feedId,
-          label: feed.feedName,
-          group: 'Quote Feeds',
-          bid: feed.bid,
-          ask: feed.ask,
-        });
-      });
-    }
-
-    return options;
-  }, [stream.quoteFeeds]);
-
-  const handlePriceSourceChange = (value: string, _option: CompactSelectOption) => {
+  const handlePriceSourceChange = (value: string) => {
     const isManual = value === 'manual';
     const feed = stream.quoteFeeds?.find(f => f.feedId === value);
 
@@ -1564,9 +1522,14 @@ export function StreamRow({ stream }: StreamRowProps) {
         },
       });
     } else {
-      // Manual: preserve current displayed values (don't overwrite user-entered)
-      const currentBid = selectedFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
-      const currentAsk = selectedFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
+      // Manual: Use snapshot values if available to avoid triggering blue highlight on mode switch
+      // Otherwise fall back to current values (quote feed or existing manual values)
+      const snapshotBid = snapshot?.referencePrice.manualBid ?? snapshot?.referencePrice.value;
+      const snapshotAsk = snapshot?.referencePrice.manualAsk ?? snapshot?.referencePrice.value;
+
+      const currentBid = snapshotBid ?? selectedFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
+      const currentAsk = snapshotAsk ?? selectedFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
+
       updateStreamSet(stream.id, {
         ...stateUpdate,
         selectedPriceSource: 'manual',
@@ -1640,26 +1603,33 @@ export function StreamRow({ stream }: StreamRowProps) {
           </div>
 
           {/* Name */}
-          <div className="truncate font-medium" title={stream.securityName}>
-            {stream.securityAlias}
-          </div>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <div className="truncate font-medium">
+                {stream.securityAlias}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs" sideOffset={4}>
+              <div className="space-y-1">
+                <div className="font-mono">{stream.securityName}</div>
+                <div className="font-mono text-muted-foreground">{stream.securityISIN}</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
 
-          {/* Price Source / QF - show "-" when unconfigured (no QF assigned), otherwise CompactSelect */}
+          {/* Price Source / QF */}
           <div onClick={(e) => e.stopPropagation()}>
-            <CompactSelect
-              value={stream.state === 'unconfigured' ? '' : (stream.selectedPriceSource || 'manual')}
-              options={priceSourceOptions}
-              onChange={handlePriceSourceChange}
+            <PriceSourceCombobox
+              value={stream.state === 'unconfigured' ? undefined : (stream.selectedPriceSource || 'manual')}
+              quoteFeeds={stream.quoteFeeds ?? []}
+              onValueChange={handlePriceSourceChange}
               placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
-              className={cn(
-                'w-20',
-                isPriceSourceStaged && 'text-blue-400 bg-blue-500/10'
-              )}
+              className={cn(isPriceSourceStaged && 'text-blue-400 bg-blue-500/10')}
             />
           </div>
 
-          {/* BID LVL - count of active bid levels */}
-          {/* Show "-" when unconfigured or no active levels */}
+          {/* BLVL - count of active bid levels */}
+          {/* Show count when active; "-" when stopped or unconfigured */}
           <span className={cn(
             'text-center tabular-nums text-xs',
             stream.state !== 'unconfigured' && bidActiveCount > 0 ? 'text-green-400' : 'text-muted-foreground'
@@ -1682,8 +1652,8 @@ export function StreamRow({ stream }: StreamRowProps) {
                 : '-')}
           </span>
 
-          {/* BSP - spread from best/innermost active bid level */}
-          {/* Show "-" when unconfigured */}
+          {/* BSP - spread from best bid level (active or configured) */}
+          {/* Show configured value even when stopped; "-" when unconfigured */}
           <span className={cn(
             'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
@@ -1695,17 +1665,17 @@ export function StreamRow({ stream }: StreamRowProps) {
               (bidBestLevel?.deltaBps != null ? formatSpreadBps(bidBestLevel.deltaBps) : '-')}
           </span>
 
-          {/* BID */}
-          {/* Show "-" when unconfigured; blue highlight when yield changed via spread edit */}
+          {/* BID - calculated yield from best level (active or configured) */}
+          {/* Show configured value even when stopped; "-" when unconfigured */}
           <span className={cn(
             'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (bidValue != null && bidValue !== 0
+            (bidValue != null && bidValue !== 0 && bidBestLevel
               ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
               : 'text-muted-foreground')
           )}>
             {stream.state === 'unconfigured' ? '-' :
-              (bidValue != null && bidValue !== 0 ? formatNumber(bidYield) : '-')}
+              (bidValue != null && bidValue !== 0 && bidBestLevel ? formatNumber(bidYield) : '-')}
           </span>
 
           {/* Live Bid - softer tone for external market data */}
@@ -1730,21 +1700,21 @@ export function StreamRow({ stream }: StreamRowProps) {
               (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
           </span>
 
-          {/* ASK */}
-          {/* Show "-" when unconfigured; blue highlight when yield changed via spread edit */}
+          {/* ASK - calculated yield from best level (active or configured) */}
+          {/* Show configured value even when stopped; "-" when unconfigured */}
           <span className={cn(
             'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
-            (askValue != null && askValue !== 0
+            (askValue != null && askValue !== 0 && askBestLevel
               ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
               : 'text-muted-foreground')
           )}>
             {stream.state === 'unconfigured' ? '-' :
-              (askValue != null && askValue !== 0 ? formatNumber(askYield) : '-')}
+              (askValue != null && askValue !== 0 && askBestLevel ? formatNumber(askYield) : '-')}
           </span>
 
-          {/* ASP - spread from best/innermost active ask level */}
-          {/* Show "-" when unconfigured */}
+          {/* ASP - spread from best ask level (active or configured) */}
+          {/* Show configured value even when stopped; "-" when unconfigured */}
           <span className={cn(
             'text-right tabular-nums text-xs px-1 py-0.5 rounded',
             stream.state === 'unconfigured' ? 'text-muted-foreground' :
@@ -1772,7 +1742,7 @@ export function StreamRow({ stream }: StreamRowProps) {
           </span>
 
           {/* ALVL - count of active ask levels */}
-          {/* Show "-" when unconfigured or no active levels */}
+          {/* Show count when active; "-" when stopped or unconfigured */}
           <span className={cn(
             'text-center tabular-nums text-xs',
             stream.state !== 'unconfigured' && askActiveCount > 0 ? 'text-red-400' : 'text-muted-foreground'
@@ -1800,13 +1770,13 @@ export function StreamRow({ stream }: StreamRowProps) {
             'sticky right-0 z-10 px-2 py-2 flex items-center justify-end gap-1 overflow-visible',
             'border-l border-border/30',
             'shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.3)]',
-            'group-hover:bg-[hsl(var(--muted)/0.5)]',
+            'group-hover:bg-[color-mix(in_srgb,var(--muted)_50%,transparent)]',
             ACTIONS_COLUMN_WIDTH,
             // Match row background state
-            isExpanded ? 'bg-[hsl(var(--muted)/0.25)]' :
-            stream.state === 'staging' ? 'bg-[hsl(var(--status-staging)/0.1)]' :
-            stream.state === 'paused' ? 'bg-[hsl(var(--status-paused)/0.1)]' :
-            stream.state === 'halted' ? 'bg-[hsl(var(--status-halted)/0.1)]' :
+            isExpanded ? 'bg-[color-mix(in_srgb,var(--muted)_25%,transparent)]' :
+            stream.state === 'staging' ? 'bg-[color-mix(in_srgb,var(--status-staging)_10%,transparent)]' :
+            stream.state === 'paused' ? 'bg-[color-mix(in_srgb,var(--status-paused)_10%,transparent)]' :
+            stream.state === 'halted' ? 'bg-[color-mix(in_srgb,var(--status-halted)_10%,transparent)]' :
             'bg-background'
           )}
           onClick={(e) => e.stopPropagation()}
@@ -1876,29 +1846,10 @@ export function StreamRow({ stream }: StreamRowProps) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {hasAnyActiveLevel ? 'Pause stream' : 'Launch stream'}
+                {hasAnyActiveLevel ? 'Stop stream' : 'Launch stream'}
               </TooltipContent>
             </Tooltip>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteStreamSet(stream.id);
-                }}
-                disabled={hasAnyActiveLevel}
-                className="h-6 w-6 shrink-0 min-w-[24px] text-muted-foreground hover:bg-destructive hover:text-destructive-foreground disabled:hover:bg-transparent"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {hasAnyActiveLevel ? 'Pause the stream to remove it' : 'Remove stream'}
-            </TooltipContent>
-          </Tooltip>
         </div>
       </div>
 
@@ -1957,6 +1908,7 @@ export function StreamRow({ stream }: StreamRowProps) {
           launchAllLevels={launchAllLevels}
           pauseAllLevels={pauseAllLevels}
           revertStagingChanges={revertStagingChanges}
+          deleteStreamSet={deleteStreamSet}
           launchingStreamIds={launchingStreamIds}
           launchingLevelKeys={launchingLevelKeys}
         />

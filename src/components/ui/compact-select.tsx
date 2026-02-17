@@ -186,13 +186,13 @@ export function CompactSelect({
           ref={dropdownRef}
           className="fixed z-[9999] rounded overflow-hidden border border-border shadow-md"
           style={{
-            background: 'hsl(var(--popover))',
-            color: 'hsl(var(--popover-foreground))',
+            background: 'var(--popover)',
+            color: 'var(--popover-foreground)',
             top: dropdownRect.top,
             left: dropdownRect.left,
             width: dropdownRect.width,
             maxHeight: 192,
-            boxShadow: '0 4px 6px -1px hsl(var(--border) / 0.3), 0 2px 4px -2px hsl(var(--border) / 0.2)',
+            boxShadow: '0 4px 6px -1px color-mix(in srgb, var(--border) 30%, transparent), 0 2px 4px -2px color-mix(in srgb, var(--border) 20%, transparent)',
           }}
           onKeyDown={handleKeyDown}
         >

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { TooltipProvider } from './components/ui/tooltip';
-import { Toolbar, TabBar, SearchBar } from './components/GlobalControls';
+import { Toolbar, TabBar } from './components/GlobalControls';
 import { StreamTable } from './components/StreamTable';
 import { startPriceSimulation, stopPriceSimulation } from './hooks/useStreamStore';
 
@@ -21,9 +21,6 @@ function App() {
               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                 Prototype
               </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <SearchBar />
             </div>
           </div>
         </header>

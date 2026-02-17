@@ -1,82 +1,84 @@
 @import "tailwindcss";
 
-@theme {
+@theme inline {
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
 }
 
 /* CSS Variables for theming */
 :root {
-  --background: 0 0% 9%;
-  --foreground: 0 0% 98%;
-  --card: 0 0% 12%;
-  --card-foreground: 0 0% 98%;
-  --popover: 0 0% 12%;
-  --popover-foreground: 0 0% 98%;
+  --background: hsl(0 0% 9%);
+  --foreground: hsl(0 0% 98%);
+  --card: hsl(0 0% 12%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(0 0% 12%);
+  --popover-foreground: hsl(0 0% 98%);
   /* Cursor-style popover surface: solid dark charcoal, elevated above background */
-  --popover-surface: 0 0% 17%;
-  --primary: 210 100% 52%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 20%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 15%;
-  --muted-foreground: 0 0% 64%;
-  --accent: 210 100% 52%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 20%;
-  --input: 0 0% 20%;
-  --ring: 210 100% 52%;
+  --popover-surface: hsl(0 0% 17%);
+  --primary: hsl(210 100% 52%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(0 0% 20%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(0 0% 15%);
+  --muted-foreground: hsl(0 0% 64%);
+  --accent: hsl(210 100% 52%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(0 0% 20%);
+  --input: hsl(0 0% 20%);
+  --ring: hsl(210 100% 52%);
   --radius: 0.5rem;
 
   /* Status colors */
-  --status-active: 142 76% 36%;
-  --status-paused: 0 0% 50%;
-  --status-staging: 217 91% 60%;
-  --status-halted: 38 92% 50%;
-  --status-cancelled: 0 0% 45%;
-  --status-unconfigured: 0 0% 35%;
+  --status-active: hsl(142 76% 36%);
+  --status-paused: hsl(0 0% 50%);
+  --status-staging: hsl(217 91% 60%);
+  --status-halted: hsl(38 92% 50%);
+  --status-cancelled: hsl(0 0% 45%);
+  --status-unconfigured: hsl(0 0% 35%);
 
   /* Price colors */
-  --price-up: 142 76% 36%;
-  --price-down: 0 84% 60%;
-  --price-override: 217 91% 60%;
-  --price-frozen: 38 92% 50%;
+  --price-up: hsl(142 76% 36%);
+  --price-down: hsl(0 84% 60%);
+  --price-override: hsl(217 91% 60%);
+  --price-frozen: hsl(38 92% 50%);
 
   /* Live Bid/Ask - distinct colors for external market data */
-  --live-bid: 38 100% 65%;  /* #FFB84D - orange/amber */
-  --live-ask: 213 100% 65%; /* #4A9EFF - blue */
+  --live-bid: hsl(38 100% 65%);  /* #FFB84D - orange/amber */
+  --live-ask: hsl(213 100% 65%); /* #4A9EFF - blue */
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  border-color: hsl(var(--border));
+  border-color: var(--border);
 }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: var(--background);
+  color: var(--foreground);
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -96,16 +98,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: var(--muted);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--secondary));
+  background: var(--secondary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
 }
 
 /* Focus ring */
@@ -113,13 +115,13 @@ body {
   outline: none;
 }
 .focus-ring:focus-visible {
-  outline: 2px solid hsl(var(--ring));
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
 /* Table styles */
 .table-row-hover:hover {
-  background-color: hsl(var(--muted) / 0.5);
+  background-color: color-mix(in srgb, var(--muted) 50%, transparent);
 }
 
 /* Accordion expand/collapse */
@@ -144,22 +146,22 @@ body {
 
 /* Expanded row - subtle surface tint for open detail/edit view (low specificity so state bg overrides) */
 .expanded-row-bg {
-  background-color: hsl(var(--muted) / 0.25);
+  background-color: color-mix(in srgb, var(--muted) 25%, transparent);
 }
 
 /* Staging state background */
 .staging-bg {
-  background-color: hsl(var(--status-staging) / 0.1);
+  background-color: color-mix(in srgb, var(--status-staging) 10%, transparent);
 }
 
 /* Paused state background */
 .paused-bg {
-  background-color: hsl(var(--status-paused) / 0.1);
+  background-color: color-mix(in srgb, var(--status-paused) 10%, transparent);
 }
 
 /* Halted state background */
 .halted-bg {
-  background-color: hsl(var(--status-halted) / 0.1);
+  background-color: color-mix(in srgb, var(--status-halted) 10%, transparent);
 }
 
 /* Live Bid/Ask - distinct colors for external market data columns */
@@ -172,13 +174,13 @@ body {
 
 /* Stream Set selected state - blue outline only, no fill. Inset box-shadow avoids overflow clipping. */
 .stream-set-selected {
-  box-shadow: inset 0 0 0 2px hsl(var(--primary));
+  box-shadow: inset 0 0 0 2px var(--primary);
 }
 
 /* Segmented control - shadcn/Cursor style */
 .segmented-control {
-  background-color: hsl(var(--muted));
-  border: 1px solid hsl(var(--input));
+  background-color: var(--muted);
+  border: 1px solid var(--input);
   border-radius: 0.375rem;
   padding: 2px;
   display: inline-flex;
@@ -192,22 +194,22 @@ body {
   transition: background-color 0.15s, color 0.15s;
 }
 .segmented-control-segment[data-active="true"] {
-  background-color: hsl(var(--card));
-  color: hsl(var(--card-foreground));
+  background-color: var(--card);
+  color: var(--card-foreground);
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.2);
-  border: 1px solid hsl(var(--border));
+  border: 1px solid var(--border);
 }
 .segmented-control-segment[data-active="false"] {
-  color: hsl(var(--muted-foreground));
+  color: var(--muted-foreground);
 }
 .segmented-control-segment[data-active="false"]:hover {
-  background-color: hsl(var(--muted) / 0.8);
-  color: hsl(var(--foreground) / 0.9);
+  background-color: color-mix(in srgb, var(--muted) 80%, transparent);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 
 /* Cursor-style popover: solid dark charcoal background, rounded corners, subtle elevation */
 .popover-surface {
-  background-color: hsl(var(--popover-surface));
+  background-color: var(--popover-surface);
   border-radius: 0.5rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   border: none;
@@ -219,26 +221,26 @@ body {
   transition: background-color 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .tabs-trigger-line:hover {
-  background-color: hsl(var(--muted) / 0.8);
-  color: hsl(var(--foreground));
+  background-color: color-mix(in srgb, var(--muted) 80%, transparent);
+  color: var(--foreground);
 }
 .tabs-trigger-line:focus-visible {
-  box-shadow: 0 0 0 2px hsl(var(--ring));
+  box-shadow: 0 0 0 2px var(--ring);
 }
 .tabs-trigger-line:active {
-  background-color: hsl(var(--muted));
+  background-color: var(--muted);
 }
 .tabs-trigger-line[data-state="active"] {
-  background-color: hsl(var(--card));
-  color: hsl(var(--card-foreground));
-  border: 1px solid hsl(var(--border));
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 .tabs-trigger-line[data-state="active"]:hover {
-  background-color: hsl(var(--card) / 0.95);
+  background-color: color-mix(in srgb, var(--card) 95%, transparent);
 }
 .tabs-trigger-line[data-state="inactive"] {
-  color: hsl(var(--muted-foreground));
+  color: var(--muted-foreground);
 }
 .tabs-trigger-line:disabled,
 .tabs-trigger-line[data-disabled] {
@@ -254,27 +256,27 @@ body {
 }
 /* Hover: mouse over */
 .popover-menu-item:hover {
-  background-color: hsl(var(--muted) / 0.9);
-  color: hsl(var(--foreground));
+  background-color: color-mix(in srgb, var(--muted) 90%, transparent);
+  color: var(--foreground);
 }
 /* Focus: keyboard focus */
 .popover-menu-item:focus {
-  background-color: hsl(var(--muted) / 0.9);
-  color: hsl(var(--foreground));
+  background-color: color-mix(in srgb, var(--muted) 90%, transparent);
+  color: var(--foreground);
 }
 .popover-menu-item:focus-visible {
-  outline: 1px solid hsl(var(--ring) / 0.5);
+  outline: 1px solid color-mix(in srgb, var(--ring) 50%, transparent);
   outline-offset: -1px;
 }
 /* Active: pressed/click */
 .popover-menu-item:active {
-  background-color: hsl(var(--muted));
-  color: hsl(var(--foreground));
+  background-color: var(--muted);
+  color: var(--foreground);
 }
 /* Highlighted: Radix keyboard nav / pointer over */
 .popover-menu-item[data-highlighted] {
-  background-color: hsl(var(--muted) / 0.9);
-  color: hsl(var(--foreground));
+  background-color: color-mix(in srgb, var(--muted) 90%, transparent);
+  color: var(--foreground);
 }
 /* Disabled */
 .popover-menu-item[data-disabled] {
@@ -441,7 +443,7 @@ body {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--muted-foreground) / 0.3);
+  background-color: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
   border-radius: 2px;
 }
 

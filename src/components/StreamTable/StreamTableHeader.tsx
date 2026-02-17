@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ChevronDown, Minus, Plus, RotateCcw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PriceSourceBatchPopover } from './PriceSourceBatchPopover';
@@ -19,7 +19,7 @@ export const STREAM_TABLE_COL_GRID =
   'grid-cols-[40px_100px_90px_40px_55px_50px_55px_55px_55px_55px_50px_55px_40px_45px]';
 
 /** Width of the sticky actions column */
-export const ACTIONS_COLUMN_WIDTH = 'w-[60px]';
+export const ACTIONS_COLUMN_WIDTH = 'w-[32px]';
 
 /** Round to 3 decimal places for bps values */
 function roundBps(n: number): number {
@@ -47,32 +47,22 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
   const [inputStr, setInputStr] = useState('0');
   const [affectedCount, setAffectedCount] = useState(0);
   const { stepSize } = useSpreadStepSize();
-  
-  // Store original spreads when popover opens for Cancel Edits
-  const originalSpreadsRef = useRef<Map<string, number[]>>(new Map());
-  
+
   const {
     adjustSpreadForType,
     resetSpreadsForType,
-    revertSpreadsForType,
     getStreamsForBatchSpread,
   } = useStreamStore();
 
-  // Capture original spreads when popover opens
+  // Update affected count when popover opens
   useEffect(() => {
     if (open) {
       const streams = getStreamsForBatchSpread(securityType);
-      const originals = new Map<string, number[]>();
-      streams.forEach((stream) => {
-        const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
-        originals.set(stream.id, matrix.map((l) => l.deltaBps));
-      });
-      originalSpreadsRef.current = originals;
       setAffectedCount(streams.length);
       setAdjustmentValue(0);
       setInputStr('0');
     }
-  }, [open, side, securityType, getStreamsForBatchSpread]);
+  }, [open, securityType, getStreamsForBatchSpread]);
 
   const applyAdjustment = useCallback(
     (adj: number) => {
@@ -126,12 +116,6 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
 
   const handleReset = () => {
     resetSpreadsForType(side, securityType);
-    setAdjustmentValue(0);
-    setInputStr('0');
-  };
-
-  const handleCancelEdits = () => {
-    revertSpreadsForType(side, securityType);
     setAdjustmentValue(0);
     setInputStr('0');
   };
@@ -227,28 +211,18 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
             </Button>
           </div>
           
-          {/* Action Buttons - Cancel Edits, Reset, and Settings */}
+          {/* Action Buttons - Reset and Settings */}
           <div className="mt-2.5 flex items-center justify-end gap-2">
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCancelEdits();
-              }}
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap"
-              aria-label="Cancel spread edits and revert to original values"
-            >
-              Cancel edits
-            </Button>
             <Button
               onClick={(e) => {
                 e.stopPropagation();
                 handleReset();
               }}
               className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap gap-1"
-              aria-label="Reset all spreads to default values"
+              aria-label="Reset all spreads to default spread values"
             >
               <RotateCcw className="h-2.5 w-2.5 shrink-0" />
-              Reset
+              Default spread
             </Button>
             <SpreadStepSettings />
           </div>

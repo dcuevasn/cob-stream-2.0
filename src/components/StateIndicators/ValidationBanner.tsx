@@ -20,7 +20,7 @@ export function ValidationBanner({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-[8px] py-1.5 rounded-md bg-[hsl(var(--status-halted))]/15 text-[11px] text-[hsl(var(--status-halted))]',
+        'flex items-center gap-2 px-[8px] py-1.5 rounded-md bg-[var(--status-halted)]/15 text-[11px] text-[var(--status-halted)]',
         className
       )}
     >
@@ -29,10 +29,10 @@ export function ValidationBanner({
       {onRelaunch && (
         <Button
           variant="default"
-          size="compact"
+          size="default"
           onClick={onRelaunch}
           disabled={isLaunching}
-          className="h-6 min-h-6 !px-[8px] py-1 text-[11px] bg-[hsl(var(--status-halted))] text-black hover:bg-[hsl(var(--status-halted))]/90 active:bg-[hsl(var(--status-halted))]/80 shrink-0 min-w-[70px]"
+          className="h-6 min-h-6 !px-[8px] py-1 text-[11px] bg-[var(--status-halted)] text-black hover:bg-[var(--status-halted)]/90 active:bg-[var(--status-halted)]/80 shrink-0 min-w-[70px]"
         >
           {isLaunching ? (
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />

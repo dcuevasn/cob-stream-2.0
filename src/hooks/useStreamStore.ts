@@ -32,6 +32,8 @@ interface StreamStore {
   updateStreamSet: (id: string, updates: Partial<StreamSet>, options?: { skipStaging?: boolean }) => void;
   selectStream: (id: string | null) => void;
   toggleExpanded: (id: string) => void;
+  expandAllInView: () => void;
+  collapseAllInView: () => void;
   setActiveTab: (tab: SecurityType | 'All') => void;
   setSearchQuery: (query: string) => void;
   setPreferences: (prefs: Partial<UserPreferences>) => void;
@@ -231,6 +233,24 @@ export const useStreamStore = create<StreamStore>()(
           }
           return { expandedStreamIds: newExpanded };
         }),
+
+      expandAllInView: () => {
+        const ids = get().getFilteredStreamSets().map((s) => s.id);
+        set((state) => {
+          const newExpanded = new Set(state.expandedStreamIds);
+          ids.forEach((id) => newExpanded.add(id));
+          return { expandedStreamIds: newExpanded };
+        });
+      },
+
+      collapseAllInView: () => {
+        const ids = new Set(get().getFilteredStreamSets().map((s) => s.id));
+        set((state) => {
+          const newExpanded = new Set(state.expandedStreamIds);
+          ids.forEach((id) => newExpanded.delete(id));
+          return { expandedStreamIds: newExpanded };
+        });
+      },
 
       setActiveTab: (tab) => set({ activeTab: tab, searchQuery: '' }),
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -1193,16 +1213,51 @@ export const useStreamStore = create<StreamStore>()(
       resetSpreadsForType: (side, securityType) => {
         const targetStreams = get().getStreamsForBatchSpread(securityType);
         const targetIds = new Set(targetStreams.map((s) => s.id));
-        // Default spreads: L1=0, L2=1, L3=2, L4=3, L5=4 bps (negative for ask)
-        const defaultSpreads = [0, 1, 2, 3, 4];
-        
+        // Get default spreads from localStorage (or use fallback)
+        const getDefaultSpreads = () => {
+          try {
+            const raw = localStorage.getItem('default-spread-values');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+
+              // Handle old format: plain array [0, 1, 2, 3, 4]
+              // Return migrated data but don't save (to avoid side effects)
+              if (Array.isArray(parsed) && parsed.length === 5 && parsed.every((v: unknown) => typeof v === 'number')) {
+                return {
+                  bid: [...parsed],
+                  ask: parsed.map((v) => -Math.abs(v)),
+                };
+              }
+
+              // Handle new format: { bid: [...], ask: [...] }
+              if (
+                parsed &&
+                typeof parsed === 'object' &&
+                Array.isArray(parsed.bid) &&
+                Array.isArray(parsed.ask) &&
+                parsed.bid.length === 5 &&
+                parsed.ask.length === 5 &&
+                parsed.bid.every((v: unknown) => typeof v === 'number') &&
+                parsed.ask.every((v: unknown) => typeof v === 'number')
+              ) {
+                return parsed as { bid: number[]; ask: number[] };
+              }
+            }
+          } catch {
+            // Fall through to default
+          }
+          return { bid: [0, 1, 2, 3, 4], ask: [0, -1, -2, -3, -4] }; // Default fallback
+        };
+        const defaultSpreads = getDefaultSpreads();
+
         set((state) => ({
           streamSets: state.streamSets.map((ss) => {
             if (!targetIds.has(ss.id)) return ss;
             const sideData = side === 'bid' ? ss.bid : ss.ask;
+            const sideDefaults = side === 'bid' ? defaultSpreads.bid : defaultSpreads.ask;
             const updatedMatrix = sideData.spreadMatrix.map((level, i) => ({
               ...level,
-              deltaBps: side === 'ask' ? -Math.abs(defaultSpreads[i] ?? 0) : (defaultSpreads[i] ?? 0),
+              deltaBps: sideDefaults[i] ?? 0,
             }));
             return {
               ...ss,

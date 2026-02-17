@@ -54,6 +54,15 @@ export function getBestActiveLevel(
   return undefined;
 }
 
+/** Best/innermost configured level: lowest level number with configured values (L1 preferred, then L2, etc.) regardless of active state */
+export function getBestConfiguredLevel(
+  matrix: Level[] | undefined
+): Level | undefined {
+  if (!matrix?.length) return undefined;
+  // Return first level in matrix (sorted by levelNumber, L1 first)
+  return matrix[0];
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

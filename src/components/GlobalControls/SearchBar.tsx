@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
 
 const SEARCH_DEBOUNCE_MS = 80;
@@ -70,32 +71,26 @@ export function SearchBar() {
     <div className="flex items-center gap-2">
       <div
         className={cn(
-          'relative flex w-64 min-w-0 items-center rounded-md border border-input bg-background shadow-sm transition-colors',
-          'hover:border-muted-foreground/40 hover:bg-muted/30',
-          'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background',
-          hasSearch && filteredCount === 0 && 'border-destructive/50 focus-within:border-destructive/70',
+          'relative w-[300px] min-w-0',
           isLoading && 'pointer-events-none opacity-50'
         )}
       >
         <Search
-          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 shrink-0 text-muted-foreground pointer-events-none"
-          aria-hidden
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10"
+          aria-hidden="true"
         />
-        <input
+        <Input
           ref={inputRef}
           type="text"
-          placeholder="Search by name, alias, or ID…"
+          placeholder="Search streams..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
           disabled={isLoading}
           className={cn(
-            'flex h-8 w-full flex-1 rounded-md bg-transparent pl-9 pr-9 py-2 text-sm',
-            'placeholder:text-muted-foreground',
-            'focus-visible:outline-none',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            'file:border-0 file:bg-transparent file:text-sm file:font-medium'
+            'pl-9 pr-9',
+            hasSearch && filteredCount === 0 && 'border-destructive/50 focus-visible:border-destructive/70 focus-visible:ring-destructive/30'
           )}
           aria-label="Search streams"
           aria-describedby={hasSearch ? 'search-results-hint' : undefined}
@@ -108,13 +103,14 @@ export function SearchBar() {
                 onClick={handleClear}
                 aria-label="Clear search"
                 className={cn(
-                  'absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-sm',
-                  'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  'absolute right-3 top-1/2 -translate-y-1/2 z-10',
+                  'flex items-center justify-center h-5 w-5 rounded-sm',
+                  'text-muted-foreground hover:text-foreground',
+                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                   'transition-colors'
                 )}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Clear search (Esc)</TooltipContent>

@@ -11,11 +11,11 @@ const badgeVariants = cva(
         secondary: 'border-transparent bg-secondary text-secondary-foreground',
         destructive: 'border-transparent bg-destructive text-destructive-foreground',
         outline: 'text-foreground',
-        active: 'border-transparent bg-[hsl(var(--status-active))] text-white',
-        staging: 'border-transparent bg-[hsl(var(--status-staging))] text-white',
-        halted: 'border-transparent bg-[hsl(var(--status-halted))] text-black',
-        unconfigured: 'border-transparent bg-[hsl(var(--status-unconfigured))] text-white',
-        cancelled: 'border-transparent bg-[hsl(var(--status-cancelled))] text-white line-through',
+        active: 'border-transparent bg-[var(--status-active)] text-white',
+        staging: 'border-transparent bg-[var(--status-staging)] text-white',
+        halted: 'border-transparent bg-[var(--status-halted)] text-black',
+        unconfigured: 'border-transparent bg-[var(--status-unconfigured)] text-white',
+        cancelled: 'border-transparent bg-[var(--status-cancelled)] text-white line-through',
         /** Ultra-compact staging indicator: "S" badge, informational blue, dark/light theme support */
         'staging-indicator':
           'shrink-0 inline-flex items-center justify-center w-5 h-[14px] min-w-5 px-0 py-0 rounded border text-[10px] font-semibold ' +

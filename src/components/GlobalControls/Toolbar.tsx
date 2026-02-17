@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { SearchBar } from './SearchBar';
 import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
 import { LaunchProgressPopover } from './LaunchProgressPopover';
 import { PauseProgressPopover } from './PauseProgressPopover';
@@ -127,7 +128,7 @@ export function Toolbar() {
                 size={isCompact ? 'icon-sm' : 'sm'}
                 className={cn(
                   'gap-1 shrink-0 px-3 bg-amber-500/15 border-amber-500/50 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300',
-                  isCompact && 'h-8 min-w-8 px-2'
+                  isCompact && 'h-8 min-w-8 px-3'
                 )}
                 title="Test Only - Generate demo data"
               >
@@ -169,7 +170,7 @@ export function Toolbar() {
             variant="default"
             size={isCompact ? 'icon-sm' : 'sm'}
             onClick={() => addStreamSet('M Bono')}
-            className={cn('gap-1 shrink-0 px-2 w-fit h-7', isCompact && 'h-8 min-w-8')}
+            className={cn('gap-1 shrink-0 px-3 w-fit h-7', isCompact && 'h-8 min-w-8')}
           >
             <Plus className="h-4 w-4" />
             {!isCompact && <span className="truncate max-w-[120px]">Add security</span>}
@@ -178,20 +179,20 @@ export function Toolbar() {
         <TooltipContent>Add security</TooltipContent>
       </Tooltip>
 
-      {/* Pause All Dropdown */}
+      {/* Stop All Dropdown */}
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
-                size={isCompact ? 'icon-sm' : 'compact'}
+                size={isCompact ? 'icon-sm' : 'default'}
                 className={cn(
                   'gap-1 shrink-0 px-3 text-red-400 border-red-400/50 hover:bg-red-400/10 hover:text-red-300',
-                  isCompact && 'h-8 min-w-8 px-2',
+                  isCompact && 'h-8 min-w-8 px-3',
                   isBatchPausing && 'opacity-80 cursor-wait'
                 )}
-                title="Pause All"
+                title="Stop All"
                 disabled={isBatchPausing}
               >
                 {isBatchPausing ? (
@@ -201,27 +202,27 @@ export function Toolbar() {
                 )}
                 {!isCompact && (
                   <span className="truncate max-w-[80px]">
-                    {isBatchPausing ? 'Pausing...' : 'Pause All'}
+                    {isBatchPausing ? 'Stopping...' : 'Stop All'}
                   </span>
                 )}
                 <ChevronDown className="h-3 w-3 ml-0.5 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>{isBatchPausing ? 'Pausing streams...' : 'Pause All'}</TooltipContent>
+          <TooltipContent>{isBatchPausing ? 'Stopping streams...' : 'Stop All'}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="min-w-[160px]">
           <DropdownMenuItem onClick={handlePauseAll} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
-            Pause All
+            Stop All
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handlePauseAllBid} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
-            Pause All Bid
+            Stop All Bid
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handlePauseAllAsk} disabled={isBatchPausing}>
             <Pause className="h-4 w-4 mr-2" />
-            Pause All Ask
+            Stop All Ask
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -233,9 +234,9 @@ export function Toolbar() {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="success"
-                size={isCompact ? 'icon-sm' : 'compact'}
+                size={isCompact ? 'icon-sm' : 'default'}
                 className={cn(
-                  'gap-1 shrink-0 min-w-[32px] px-2',
+                  'gap-1 shrink-0 min-w-[32px] px-3',
                   isCompact && 'h-8 min-w-8',
                   isBatchLaunching && 'opacity-80 cursor-wait'
                 )}
@@ -281,19 +282,18 @@ export function Toolbar() {
       {hasStagedStreams && (
         <>
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={handleBatchRevert}
             disabled={isReverting}
-            className="gap-1 shrink-0 px-3 text-muted-foreground hover:text-foreground"
             title="Cancel all staged changes"
           >
             {isReverting ? (
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
-              <RotateCcw className="h-4 w-4 shrink-0" />
+              <RotateCcw data-icon="inline-start" />
             )}
-            {!isCompact && <span className="truncate">Cancel changes</span>}
+            {!isCompact && 'Cancel changes'}
           </Button>
           <div className="h-6 w-px bg-border shrink-0" />
         </>
@@ -371,35 +371,43 @@ export function Toolbar() {
       <div className="border-b border-border bg-card">
         {/* Actions and Status: buttons on top, status indicators below, right-aligned */}
         <div className="flex flex-col items-end px-4 py-2 min-w-0 w-full">
-          {/* Actions Bar: buttons only, right-aligned */}
+          {/* Actions Bar: search on left, buttons on right */}
           <div
             className={cn(
-              'flex items-center justify-end gap-1 sm:gap-2 min-w-0 w-full',
+              'flex items-center justify-between gap-2 sm:gap-3 min-w-0 w-full',
               'flex-wrap lg:flex-nowrap'
             )}
           >
-            {primaryActions}
-            {isWide ? (
-              <>
-                <div className="h-6 w-px bg-border shrink-0" />
-                {secondaryActions}
-              </>
-            ) : (
-              <>
-                <div className="h-6 w-px bg-border shrink-0" />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 shrink-0 px-3">
-                      <MoreHorizontal className="h-4 w-4" />
-                      More
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-[180px]">
-                    {moreMenuItems}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            )}
+            {/* Search Bar - Left Side */}
+            <div className="shrink-0">
+              <SearchBar />
+            </div>
+
+            {/* Action Buttons - Right Side */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              {primaryActions}
+              {isWide ? (
+                <>
+                  <div className="h-6 w-px bg-border shrink-0" />
+                  {secondaryActions}
+                </>
+              ) : (
+                <>
+                  <div className="h-6 w-px bg-border shrink-0" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1 shrink-0 px-3">
+                        <MoreHorizontal className="h-4 w-4" />
+                        More
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[180px]">
+                      {moreMenuItems}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Status Indicators: directly below buttons, right-aligned */}
@@ -410,21 +418,21 @@ export function Toolbar() {
               'flex items-center min-h-[24px] w-full mt-2 pt-2 border-t border-border/50 bg-muted/20',
               'justify-end'
             )}
-            title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${pausedCount > 0 ? `, ${pausedCount} Paused` : ''}${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
+            title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${pausedCount > 0 ? `, ${pausedCount} Stopped` : ''}${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
           >
             <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-muted-foreground shrink-0">
               {/* Only show active indicators when there are active streams */}
               {activeStreamsCount > 0 && (
                 <>
                   <span className="flex items-center gap-1 min-w-0" title="Stream Sets with ≥1 active level">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0" />
-                    <span className="text-[hsl(var(--status-active))] truncate tabular-nums">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-active)] shrink-0" />
+                    <span className="text-[var(--status-active)] truncate tabular-nums">
                       {activeStreamsCount} Streams
                     </span>
                   </span>
                   <span className="flex items-center gap-1 min-w-0" title="Total active levels (Bid + Ask)">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-active))] shrink-0 opacity-70" />
-                    <span className="text-[hsl(var(--status-active))] truncate tabular-nums opacity-90">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-active)] shrink-0 opacity-70" />
+                    <span className="text-[var(--status-active)] truncate tabular-nums opacity-90">
                       {activeOrdersCount} Orders
                     </span>
                   </span>
@@ -432,8 +440,8 @@ export function Toolbar() {
               )}
               {pausedCount > 0 && (
                 <span className="flex items-center gap-1 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-paused))] shrink-0" />
-                  <span className="text-[hsl(var(--status-paused))] truncate">{pausedCount} Paused</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-paused)] shrink-0" />
+                  <span className="text-[var(--status-paused)] truncate">{pausedCount} Stopped</span>
                 </span>
               )}
               {inactiveCount > 0 && (
@@ -444,14 +452,14 @@ export function Toolbar() {
               )}
               {hasStagedStreams && (
                 <span className="flex items-center gap-1 min-w-0 hidden sm:flex">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-staging))] shrink-0" />
-                  <span className="text-[hsl(var(--status-staging))] truncate">{stagingCount} Staging</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-staging)] shrink-0" />
+                  <span className="text-[var(--status-staging)] truncate">{stagingCount} Staging</span>
                 </span>
               )}
               {haltedCount > 0 && (
                 <span className="flex items-center gap-1 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--status-halted))] shrink-0" />
-                  <span className="text-[hsl(var(--status-halted))] truncate">{haltedCount} Halted</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-halted)] shrink-0" />
+                  <span className="text-[var(--status-halted)] truncate">{haltedCount} Halted</span>
                 </span>
               )}
             </div>

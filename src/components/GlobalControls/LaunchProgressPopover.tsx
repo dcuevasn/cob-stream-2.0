@@ -120,7 +120,7 @@ function SectionHeader({
 }) {
   const totalOrders = totalBidOrders + totalAskOrders;
   return (
-    <div className="flex items-center justify-between px-3 py-1 bg-[hsl(var(--popover-surface))] border-y border-border/30 sticky top-0 z-10">
+    <div className="flex items-center justify-between px-3 py-1 bg-[var(--popover-surface)] border-y border-border/30 sticky top-0 z-10">
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
           {securityType}
@@ -206,7 +206,7 @@ export function LaunchProgressPopover() {
       className={cn(
         'fixed bottom-6 right-6 z-50',
         'w-[300px] rounded-lg border border-border/50',
-        'bg-[hsl(var(--popover-surface))] backdrop-blur-sm shadow-2xl',
+        'bg-[var(--popover-surface)] backdrop-blur-sm shadow-2xl',
         'animate-slide-up',
         !isActive && 'animate-pulse-glow'
       )}

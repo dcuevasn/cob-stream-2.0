@@ -21,45 +21,45 @@ const stateConfig: Record<StreamState, {
   color: string;
   bgColor: string;
   label: string;
-  /** Use circle (like Active) instead of icon - for paused/inactive states */
+  /** Use circle (like Active) instead of icon - for stopped/inactive states */
   useCircle?: boolean;
 }> = {
   unconfigured: {
     icon: Settings,
-    color: 'text-[hsl(var(--status-unconfigured))]',
-    bgColor: 'bg-[hsl(var(--status-unconfigured))]',
+    color: 'text-[var(--status-unconfigured)]',
+    bgColor: 'bg-[var(--status-unconfigured)]',
     label: 'Not Configured',
   },
   staging: {
     icon: Circle,
-    color: 'text-[hsl(var(--status-staging))]',
-    bgColor: 'bg-[hsl(var(--status-staging))]',
+    color: 'text-[var(--status-staging)]',
+    bgColor: 'bg-[var(--status-staging)]',
     label: 'Staging',
     useCircle: true,
   },
   active: {
     icon: Circle,
-    color: 'text-[hsl(var(--status-active))]',
-    bgColor: 'bg-[hsl(var(--status-active))]',
+    color: 'text-[var(--status-active)]',
+    bgColor: 'bg-[var(--status-active)]',
     label: 'Active',
   },
   paused: {
     icon: Circle,
-    color: 'text-[hsl(var(--status-paused))]',
-    bgColor: 'bg-[hsl(var(--status-paused))]',
-    label: 'Paused',
+    color: 'text-[var(--status-paused)]',
+    bgColor: 'bg-[var(--status-paused)]',
+    label: 'Stopped',
     useCircle: true,
   },
   halted: {
     icon: AlertTriangle,
-    color: 'text-[hsl(var(--status-halted))]',
-    bgColor: 'bg-[hsl(var(--status-halted))]',
+    color: 'text-[var(--status-halted)]',
+    bgColor: 'bg-[var(--status-halted)]',
     label: 'Halted',
   },
   cancelled: {
     icon: XCircle,
-    color: 'text-[hsl(var(--status-cancelled))]',
-    bgColor: 'bg-[hsl(var(--status-cancelled))]',
+    color: 'text-[var(--status-cancelled)]',
+    bgColor: 'bg-[var(--status-cancelled)]',
     label: 'Cancelled',
   },
 };
@@ -91,7 +91,7 @@ export function StatusBadge({ state, haltDetails, className, showLabel = false, 
     return (
       <Tooltip>
         <TooltipTrigger asChild>{badge}</TooltipTrigger>
-        <TooltipContent className="max-w-xs bg-[hsl(var(--status-halted))] text-black">
+        <TooltipContent className="max-w-xs bg-[var(--status-halted)] text-black">
           <p className="font-medium">Stream Halted</p>
           <p className="text-xs mt-1">{haltDetails}</p>
         </TooltipContent>
