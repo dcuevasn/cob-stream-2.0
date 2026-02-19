@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem, PauseProgressState, PauseProgressItem } from '../types/streamSet';
 import { generateInitialStreamSets, generateRandomDemoData, generateStreamQuoteFeeds, generateAdditiveDemoStreams, type DemoStreamType } from '../mocks/mockData';
 import { simulateLaunch, simulateStopStream, validateStreamSet } from '../mocks/mockValidations';
-import { stagingConfigEquals } from '../lib/utils';
+import { stagingConfigEquals, getActiveLevelCount } from '../lib/utils';
 
 interface StreamStore {
   // State
@@ -17,6 +17,8 @@ interface StreamStore {
   launchingLevelKeys: Set<string>;
   /** Stream IDs that have attempted launch without a valid price source configured */
   missingPriceSourceStreamIds: Set<string>;
+  /** Per-stream: which side failed to launch due to missing manual price (transient, no stream halt) */
+  manualPriceErrors: Map<string, 'bid' | 'ask'>;
   preferences: UserPreferences;
   /** Accordion open sections in All view (SecurityType values). Persists across view changes. */
   accordionOpenSections: string[];
@@ -41,6 +43,7 @@ interface StreamStore {
 
   // Stream operations
   launchStream: (id: string) => Promise<void>;
+  applyChanges: (id: string) => Promise<void>;
   stopStream: (id: string) => Promise<void>;
   pauseStream: (id: string) => void;
   resumeStream: (id: string) => void;
@@ -66,6 +69,7 @@ interface StreamStore {
 
   // Price source validation
   clearMissingPriceSourceError: (id: string) => void;
+  clearManualPriceError: (id: string) => void;
 
   // Spread adjustments
   adjustSpreadBid: (delta: number) => void;
@@ -124,12 +128,60 @@ function createStagingSnapshot(stream: StreamSet): StagingSnapshot {
   };
 }
 
+/** Create side-specific snapshot: updates specified side, preserves other side from existing snapshot */
+function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnapshot {
+  const existingSnapshot = stream.lastLaunchedSnapshot;
+
+  // If no existing snapshot, create full snapshot
+  if (!existingSnapshot) {
+    return createStagingSnapshot(stream);
+  }
+
+  // Update only the specified side, preserve the other side from existing snapshot
+  if (side === 'bid') {
+    return {
+      ...existingSnapshot,
+      bid: {
+        spreadMatrix: stream.bid.spreadMatrix.map(({ levelNumber, deltaBps, quantity }) => ({ levelNumber, deltaBps, quantity })),
+        maxLvls: stream.bid.maxLvls ?? 1,
+      },
+      // ASK side preserved from existing snapshot
+    };
+  } else {
+    return {
+      ...existingSnapshot,
+      ask: {
+        spreadMatrix: stream.ask.spreadMatrix.map(({ levelNumber, deltaBps, quantity }) => ({ levelNumber, deltaBps, quantity })),
+        maxLvls: stream.ask.maxLvls ?? 1,
+      },
+      // BID side preserved from existing snapshot
+    };
+  }
+}
+
 function checkStagingRevert(id: string) {
   const { streamSets, updateStreamSet } = useStreamStore.getState();
   const stream = streamSets.find((ss) => ss.id === id);
   if (!stream?.hasStagingChanges || !stream.lastLaunchedSnapshot) return;
   if (stagingConfigEquals(stream, stream.lastLaunchedSnapshot)) {
     updateStreamSet(id, { hasStagingChanges: false });
+  }
+}
+
+/** Auto-clear manualPriceErrors when the user enters a valid manual price for the errored side. */
+function checkManualPriceErrors(id: string) {
+  const { streamSets, manualPriceErrors } = useStreamStore.getState();
+  if (!manualPriceErrors.has(id)) return;
+  const stream = streamSets.find((ss) => ss.id === id);
+  if (!stream) return;
+  const errorSide = manualPriceErrors.get(id)!;
+  const price = errorSide === 'bid' ? stream.referencePrice.manualBid : stream.referencePrice.manualAsk;
+  if (price != null && price !== 0) {
+    useStreamStore.setState((s) => {
+      const next = new Map(s.manualPriceErrors);
+      next.delete(id);
+      return { manualPriceErrors: next };
+    });
   }
 }
 
@@ -172,6 +224,7 @@ const defaultPreferences: UserPreferences = {
   keyboardShortcutsEnabled: true,
   defaultLevels: 5,
   toastNotificationsEnabled: true,
+  hideIndividualLevelControls: false,
 };
 
 export const useStreamStore = create<StreamStore>()(
@@ -186,6 +239,7 @@ export const useStreamStore = create<StreamStore>()(
       launchingStreamIds: new Set<string>(),
       launchingLevelKeys: new Set<string>(),
       missingPriceSourceStreamIds: new Set<string>(),
+      manualPriceErrors: new Map<string, 'bid' | 'ask'>(),
       preferences: defaultPreferences,
       accordionOpenSections: ['M Bono', 'UDI Bono', 'Cetes', 'Corporate MXN', 'Corporate UDI'],
       launchProgress: null,
@@ -213,6 +267,8 @@ export const useStreamStore = create<StreamStore>()(
             checkStagingRevert(id);
             // Check if halt state should be cleared when values become valid
             checkAndClearHaltState(id);
+            // Auto-clear manual price error when user enters a valid price
+            checkManualPriceErrors(id);
           }, REVERT_DEBOUNCE_MS);
         }
         if ('hasStagingChanges' in updates && updates.hasStagingChanges === false) {
@@ -340,6 +396,66 @@ export const useStreamStore = create<StreamStore>()(
           const next = new Set(s.launchingStreamIds);
           next.delete(id);
           return { isLoading: next.size > 0, launchingStreamIds: next };
+        });
+      },
+
+      applyChanges: async (streamId) => {
+        const { streamSets, launchAllLevels, pauseAllLevels, updateStreamSet } = get();
+        const stream = streamSets.find((ss) => ss.id === streamId);
+        if (!stream) return;
+
+        // A side must both have its isActive flag set AND have at least one actually-active level
+        // to be considered active. Using isActive alone is insufficient because resumeStream sets
+        // isActive=true without activating individual levels, and using only level counts is
+        // insufficient because stopStream leaves level.isActive=true while setting side.isActive=false.
+        const isBidActive = stream.bid.isActive && getActiveLevelCount(stream.bid.spreadMatrix, stream.bid) > 0;
+        const isAskActive = stream.ask.isActive && getActiveLevelCount(stream.ask.spreadMatrix, stream.ask) > 0;
+        const bidMaxLvls = stream.bid.maxLvls ?? 1;
+        const askMaxLvls = stream.ask.maxLvls ?? 1;
+
+        // Track loading state so the button disables during the operation
+        set((s) => ({
+          launchingStreamIds: new Set(s.launchingStreamIds).add(streamId),
+        }));
+
+        // Relaunch: active side with MAX > 0 → apply config and reactivate levels
+        if (isBidActive && bidMaxLvls > 0) await launchAllLevels(streamId, 'bid');
+        if (isAskActive && askMaxLvls > 0) await launchAllLevels(streamId, 'ask');
+
+        // Stop: active side with MAX = 0 → stop all levels, then fall through to snapshot update
+        if (isBidActive && bidMaxLvls === 0) await pauseAllLevels(streamId, 'bid');
+        if (isAskActive && askMaxLvls === 0) await pauseAllLevels(streamId, 'ask');
+
+        // For sides that were NOT relaunched (already stopped, or just stopped via MAX=0):
+        // commit current config as new snapshot without launching
+        const bidWasRelaunched = isBidActive && bidMaxLvls > 0;
+        const askWasRelaunched = isAskActive && askMaxLvls > 0;
+        if (!bidWasRelaunched || !askWasRelaunched) {
+          const updatedStream = get().streamSets.find((ss) => ss.id === streamId);
+          if (updatedStream) {
+            let newSnapshot: StagingSnapshot;
+            if (!bidWasRelaunched && !askWasRelaunched) {
+              // Neither side relaunched: commit full config as new snapshot
+              newSnapshot = createStagingSnapshot(updatedStream);
+            } else if (!bidWasRelaunched) {
+              // Bid not relaunched, ask was just launched: update bid side of snapshot
+              newSnapshot = createSideSnapshot(updatedStream, 'bid');
+            } else {
+              // Ask not relaunched, bid was just launched: update ask side of snapshot
+              newSnapshot = createSideSnapshot(updatedStream, 'ask');
+            }
+            updateStreamSet(streamId, {
+              lastLaunchedSnapshot: newSnapshot,
+              hasStagingChanges: false,
+            });
+          }
+        }
+
+        // Clear loading state
+        set((s) => {
+          const next = new Set(s.launchingStreamIds);
+          next.delete(streamId);
+          return { launchingStreamIds: next };
         });
       },
 
@@ -496,6 +612,10 @@ export const useStreamStore = create<StreamStore>()(
           next.delete(key);
           return { launchingLevelKeys: next };
         });
+
+        // Re-validate staged status after state updates complete
+        // Use setTimeout to ensure this runs after all state updates are applied
+        setTimeout(() => checkStagingRevert(streamId), 0);
       },
 
       /** Per-level pause - does NOT affect Staging. FE-only. */
@@ -543,9 +663,13 @@ export const useStreamStore = create<StreamStore>()(
           ...sideUpdate,
           ...streamStateUpdate,
         }, { skipStaging: true });
+
+        // Re-validate staged status after state updates complete
+        // Use setTimeout to ensure this runs after all state updates are applied
+        setTimeout(() => checkStagingRevert(streamId), 0);
       },
 
-      /** Launch all levels on one side - does NOT affect Staging. FE-only. Respects maxLvls. */
+      /** Launch all levels on one side - APPLIES staged changes and creates snapshot. Side-specific relaunch. */
       launchAllLevels: async (streamId, side) => {
         const { streamSets, updateStreamSet } = get();
         const stream = streamSets.find((ss) => ss.id === streamId);
@@ -559,6 +683,22 @@ export const useStreamStore = create<StreamStore>()(
           return;
         }
 
+        // Side-specific manual price check: if source is manual and this side has no price,
+        // show a transient error without halting the stream (other side can remain active).
+        if (stream.selectedPriceSource === 'manual') {
+          const manualPrice = side === 'bid' ? stream.referencePrice.manualBid : stream.referencePrice.manualAsk;
+          if (manualPrice == null || manualPrice === 0) {
+            set((s) => ({ manualPriceErrors: new Map(s.manualPriceErrors).set(streamId, side) }));
+            return;
+          }
+        }
+        // Clear any stale manual price error now that the price is present
+        set((s) => {
+          const next = new Map(s.manualPriceErrors);
+          next.delete(streamId);
+          return { manualPriceErrors: next };
+        });
+
         const streamSide = side === 'bid' ? stream.bid : stream.ask;
         const maxLvls = streamSide.maxLvls ?? 1;
         if (maxLvls === 0) return; // No levels can be active
@@ -568,16 +708,48 @@ export const useStreamStore = create<StreamStore>()(
           launchingLevelKeys: new Set(s.launchingLevelKeys).add(key),
         }));
 
+        // Validate only the launched side's configuration (price, FFCH, quantity).
+        // Yield crossing is checked only if the other side is already active.
+        const validation = validateStreamSet(stream, side);
+
+        if (!validation.success) {
+          // If validation fails, halt the stream
+          updateStreamSet(streamId, {
+            state: 'halted',
+            haltReason: validation.errorType as StreamSet['haltReason'],
+            haltDetails: validation.error,
+            bid: {
+              ...stream.bid,
+              state: validation.affectedSide === 'bid' || validation.affectedSide === 'both' ? 'halted' : stream.bid.state,
+            },
+            ask: {
+              ...stream.ask,
+              state: validation.affectedSide === 'ask' || validation.affectedSide === 'both' ? 'halted' : stream.ask.state,
+            },
+          }, { skipStaging: true });
+
+          set((s) => {
+            const next = new Set(s.launchingLevelKeys);
+            next.delete(key);
+            return { launchingLevelKeys: next };
+          });
+          return;
+        }
+
         await new Promise((r) => setTimeout(r, 250));
+
+        // Apply staged changes by creating side-specific snapshot
+        // This updates only the launched side, preserving the other side's original snapshot
+        const snapshot = createSideSnapshot(stream, side);
 
         const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
         const newMatrix = matrix.map((l) => ({ ...l, isActive: l.levelNumber <= maxLvls }));
-        
+
         // Check if both sides will be active after this launch
         const otherSide = side === 'bid' ? stream.ask : stream.bid;
         const otherSideIsActive = otherSide.spreadMatrix.some((l) => l.isActive);
         const thisSideWillBeActive = true; // We're launching all levels on this side
-        
+
         // Update the launched side
         const sideUpdate = side === 'bid'
           ? {
@@ -598,7 +770,7 @@ export const useStreamStore = create<StreamStore>()(
             };
 
         // Update stream state if at least one side is active and stream was paused/halted
-        const streamStateUpdate = (thisSideWillBeActive || otherSideIsActive) && 
+        const streamStateUpdate = (thisSideWillBeActive || otherSideIsActive) &&
           (stream.state === 'paused' || stream.state === 'halted')
           ? { state: 'active' as StreamState }
           : {};
@@ -611,11 +783,18 @@ export const useStreamStore = create<StreamStore>()(
             }
           : {};
 
+        // Check if there are still staged changes on the OTHER side
+        // The launched side is now in the snapshot, but the other side might still differ
+        const stillHasStagedChanges = !stagingConfigEquals(stream, snapshot);
+
+        // Apply changes: update snapshot and conditionally clear staging flag
         updateStreamSet(streamId, {
           ...sideUpdate,
           ...streamStateUpdate,
           ...haltStateUpdate,
-        }, { skipStaging: true });
+          lastLaunchedSnapshot: snapshot,
+          hasStagingChanges: stillHasStagedChanges,
+        });
 
         // Clear loading state
         set((s) => {
@@ -640,12 +819,12 @@ export const useStreamStore = create<StreamStore>()(
 
         const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
         const newMatrix = matrix.map((l) => ({ ...l, isActive: false }));
-        
+
         // Check if both sides will be inactive after this pause
         const otherSide = side === 'bid' ? stream.ask : stream.bid;
         const otherSideIsInactive = otherSide.spreadMatrix.every((l) => !l.isActive);
         const thisSideWillBeInactive = true; // We're pausing all levels on this side
-        
+
         // Update the paused side
         const sideUpdate = side === 'bid'
           ? {
@@ -681,6 +860,10 @@ export const useStreamStore = create<StreamStore>()(
           next.delete(key);
           return { launchingLevelKeys: next };
         });
+
+        // Re-validate staged status after state updates complete
+        // Use setTimeout to ensure this runs after all state updates are applied
+        setTimeout(() => checkStagingRevert(streamId), 0);
       },
 
       launchAllInView: async () => {
@@ -1072,6 +1255,14 @@ export const useStreamStore = create<StreamStore>()(
           const next = new Set(s.missingPriceSourceStreamIds);
           next.delete(id);
           return { missingPriceSourceStreamIds: next };
+        });
+      },
+
+      clearManualPriceError: (id) => {
+        set((s) => {
+          const next = new Map(s.manualPriceErrors);
+          next.delete(id);
+          return { manualPriceErrors: next };
         });
       },
 

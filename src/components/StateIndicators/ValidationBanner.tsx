@@ -11,6 +11,7 @@ interface ValidationBannerProps {
   onDismiss?: () => void;
   onRelaunch?: () => void;
   isLaunching?: boolean;
+  pulsing?: boolean;
   className?: string;
 }
 
@@ -65,12 +66,14 @@ export function ValidationBanner({
   onDismiss,
   onRelaunch,
   isLaunching = false,
+  pulsing = false,
   className,
 }: ValidationBannerProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-[8px] py-1.5 rounded-md bg-[var(--status-halted)]/15 text-[11px] text-[var(--status-halted)]',
+        'flex items-center gap-2 px-[8px] py-2.5 rounded-md text-[11px] text-[var(--status-halted)] transition-colors duration-200',
+        pulsing ? 'bg-[var(--status-halted)]/30 ring-1 ring-[var(--status-halted)]/60' : 'bg-[var(--status-halted)]/15',
         className
       )}
     >

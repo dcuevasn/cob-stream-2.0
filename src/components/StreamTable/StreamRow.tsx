@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel, getBestConfiguredLevel } from '../../lib/utils';
 
@@ -33,7 +33,7 @@ function YieldCrossingAlert({ bidYield1, askYield1 }: { bidYield1: number; askYi
   return (
     <div
       role="alert"
-      className="flex items-center gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[28px] h-[30px]"
+      className="flex items-center gap-2 mb-2 py-2.5 pl-[8px] pr-[8px] rounded-md bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[34px]"
       style={{ paddingLeft: '8px', paddingRight: '8px' }}
     >
       <Tooltip>
@@ -631,6 +631,7 @@ interface ExpandedLevelsTableProps {
   updateStreamSet: (id: string, updates: Partial<StreamSet>) => void;
   formatNumber: (n: number, d?: number) => string;
   launchStream: (id: string) => Promise<void>;
+  applyChanges: (id: string) => Promise<void>;
   launchLevel: (streamId: string, side: 'bid' | 'ask', levelIndex: number) => Promise<void>;
   pauseLevel: (streamId: string, side: 'bid' | 'ask', levelIndex: number) => void;
   launchAllLevels: (streamId: string, side: 'bid' | 'ask') => Promise<void>;
@@ -639,6 +640,7 @@ interface ExpandedLevelsTableProps {
   deleteStreamSet: (id: string) => void;
   launchingStreamIds: Set<string>;
   launchingLevelKeys: Set<string>;
+  hideIndividualLevelControls: boolean;
 }
 
 function ExpandedLevelsTable({
@@ -650,6 +652,7 @@ function ExpandedLevelsTable({
   updateStreamSet,
   formatNumber,
   launchStream,
+  applyChanges,
   launchLevel,
   pauseLevel,
   launchAllLevels,
@@ -658,6 +661,7 @@ function ExpandedLevelsTable({
   deleteStreamSet,
   launchingStreamIds,
   launchingLevelKeys,
+  hideIndividualLevelControls,
 }: ExpandedLevelsTableProps) {
   const { defaultSpreads } = useDefaultSpreads();
 
@@ -749,13 +753,13 @@ function ExpandedLevelsTable({
       style={{ paddingLeft: '12px', paddingRight: '12px', paddingBottom: '12px' }}
       onClick={(e) => e.stopPropagation()}
     >
-      {stream.hasStagingChanges && (
+      {stream.hasStagingChanges && stream.lastLaunchedSnapshot && (
         <div
           role="alert"
           className="flex items-center justify-between gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] min-h-[28px] h-[30px]"
           style={{ paddingLeft: '8px', paddingRight: '8px' }}
         >
-          <span className="truncate shrink-0">Staged changes — relaunch to apply.</span>
+          <span className="truncate shrink-0">Staged changes — click apply to update.</span>
           <div className="flex items-center gap-1.5 shrink-0">
             {stream.lastLaunchedSnapshot && (
               <Button
@@ -772,16 +776,16 @@ function ExpandedLevelsTable({
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                launchStream(stream.id);
+                applyChanges(stream.id);
               }}
               disabled={launchingStreamIds.has(stream.id)}
               className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 shrink-0 w-fit min-w-0"
-              title="Relaunch to apply changes"
+              title="Apply changes"
             >
               {launchingStreamIds.has(stream.id) ? (
                 <Loader2 className="h-3 w-3 animate-spin shrink-0" aria-hidden />
               ) : (
-                'Relaunch'
+                'Apply changes'
               )}
             </Button>
           </div>
@@ -798,7 +802,7 @@ function ExpandedLevelsTable({
         role="group"
         aria-label="Price and volume settings"
       >
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           {stream.selectedPriceSource === 'manual' && (
             <ManualBidAskInputs
               stream={stream}
@@ -816,7 +820,7 @@ function ExpandedLevelsTable({
             />
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0 ml-auto">
+        <div className="flex items-center gap-2 shrink-0 ml-auto flex-wrap justify-end">
           <div
             role="tablist"
             aria-label="Volume unit"
@@ -892,9 +896,9 @@ function ExpandedLevelsTable({
 
       {/* Tables container - side by side with minimal gap, horizontal scroll when needed */}
       <div className="overflow-x-auto">
-        <div className="flex gap-2">
+        <div className="flex flex-col md:flex-row gap-2">
           {/* Bid Levels - columns: Qty/Notional, Spread, Yield */}
-          <div className="flex-1 min-w-[220px]">
+          <div className="flex-1 min-w-0 md:min-w-[220px]">
             <div className="flex items-center justify-between gap-1 mb-1">
               <span className="text-[10px] font-medium text-green-400 uppercase tracking-wider whitespace-nowrap">
                 Bid Levels ({bidActiveCount})
@@ -935,30 +939,9 @@ function ExpandedLevelsTable({
                       size="icon-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        launchAllLevels(stream.id, 'bid');
-                      }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
-                      className="h-6 w-6 shrink-0 text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                    >
-                      {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Launch all bid levels</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
                         pauseAllLevels(stream.id, 'bid');
                       }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      disabled={bidActiveCount === 0 || launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
                       className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     >
                       {launchingLevelKeys.has(`${stream.id}-bid-pause-all`) ? (
@@ -970,10 +953,31 @@ function ExpandedLevelsTable({
                   </TooltipTrigger>
                   <TooltipContent>Stop all bid levels</TooltipContent>
                 </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        launchAllLevels(stream.id, 'bid');
+                      }}
+                      disabled={bidActiveCount > 0 || launchingLevelKeys.has(`${stream.id}-bid-launch-all`) || launchingLevelKeys.has(`${stream.id}-bid-pause-all`)}
+                      className="h-6 w-6 shrink-0 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                    >
+                      {launchingLevelKeys.has(`${stream.id}-bid-launch-all`) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Launch all bid levels</TooltipContent>
+                </Tooltip>
               </div>
             </div>
-            <div className="rounded border border-border/50">
-              <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0">
+            <div className="rounded border border-border/50 overflow-x-auto">
+              <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0 min-w-[200px]">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border/50">
                     <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
@@ -984,7 +988,9 @@ function ExpandedLevelsTable({
                     </th>
                     <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                     <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
-                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                    {!hideIndividualLevelControls && (
+                      <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                    )}
                     <th className="text-center py-1 px-1 text-muted-foreground font-medium w-4 whitespace-nowrap">S</th>
                   </tr>
                 </thead>
@@ -1005,6 +1011,7 @@ function ExpandedLevelsTable({
                     pauseLevel={pauseLevel}
                     launchingLevelKeys={launchingLevelKeys}
                     snapshot={stream.lastLaunchedSnapshot}
+                    hideIndividualLevelControls={hideIndividualLevelControls}
                   />
                 ))}
               </tbody>
@@ -1013,7 +1020,7 @@ function ExpandedLevelsTable({
           </div>
 
           {/* Ask Levels - mirrored: Status/Actions/L/Yield/Spread/Qty */}
-          <div className="flex-1 min-w-[220px]">
+          <div className="flex-1 min-w-0 md:min-w-[220px]">
             <div className="flex items-center justify-between gap-1 mb-1">
               <div className="flex items-center gap-0.5">
                 <Tooltip>
@@ -1025,7 +1032,7 @@ function ExpandedLevelsTable({
                         e.stopPropagation();
                         launchAllLevels(stream.id, 'ask');
                       }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                      disabled={askActiveCount > 0 || launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
                       className="h-6 w-6 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10"
                     >
                       {launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ? (
@@ -1046,7 +1053,7 @@ function ExpandedLevelsTable({
                         e.stopPropagation();
                         pauseAllLevels(stream.id, 'ask');
                       }}
-                      disabled={launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
+                      disabled={askActiveCount === 0 || launchingLevelKeys.has(`${stream.id}-ask-launch-all`) || launchingLevelKeys.has(`${stream.id}-ask-pause-all`)}
                       className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     >
                       {launchingLevelKeys.has(`${stream.id}-ask-pause-all`) ? (
@@ -1091,12 +1098,14 @@ function ExpandedLevelsTable({
                 Ask Levels ({askActiveCount})
               </span>
             </div>
-          <div className="rounded border border-border/50">
-            <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0">
+          <div className="rounded border border-border/50 overflow-x-auto">
+            <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0 min-w-[200px]">
               <thead>
                 <tr className="bg-muted/50 border-b border-border/50">
                   <th className="text-center py-1 px-1 text-muted-foreground font-medium w-4 whitespace-nowrap">S</th>
-                  <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                  {!hideIndividualLevelControls && (
+                    <th className="text-center py-1 px-1 text-muted-foreground font-medium w-8 whitespace-nowrap" aria-label="Level actions" />
+                  )}
                   <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                   <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                   <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
@@ -1124,6 +1133,7 @@ function ExpandedLevelsTable({
                     pauseLevel={pauseLevel}
                     launchingLevelKeys={launchingLevelKeys}
                     snapshot={stream.lastLaunchedSnapshot}
+                    hideIndividualLevelControls={hideIndividualLevelControls}
                   />
                 ))}
               </tbody>
@@ -1150,6 +1160,7 @@ interface LevelRowProps {
   pauseLevel: (streamId: string, side: 'bid' | 'ask', levelIndex: number) => void;
   launchingLevelKeys: Set<string>;
   snapshot?: StagingSnapshot; // For staging comparison
+  hideIndividualLevelControls?: boolean;
 }
 
 function LevelRow({
@@ -1166,6 +1177,7 @@ function LevelRow({
   pauseLevel,
   launchingLevelKeys,
   snapshot,
+  hideIndividualLevelControls,
 }: LevelRowProps) {
   const onUpdate = side === 'bid' ? onUpdateBid : onUpdateAsk;
   const yieldVal = baseValue + level.deltaBps / 100;
@@ -1325,8 +1337,8 @@ function LevelRow({
     return (
       <tr className="border-b border-border/30 last:border-0 hover:bg-muted/30">
         {statusCell}
-        {actionCell}
-        <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px] text-center">L{level.levelNumber}</td>
+        {!hideIndividualLevelControls && actionCell}
+        <td className={cn("py-0.5 px-1 tabular-nums text-[11px] text-center", level.levelNumber > maxLvls ? "text-muted-foreground/40" : "text-red-400/90")}>L{level.levelNumber}</td>
         <td className="py-0.5 px-1 tabular-nums text-red-400/90">
           <LevelCellInput
             value={yieldInput}
@@ -1393,8 +1405,8 @@ function LevelRow({
           isStaged={isYieldStaged}
         />
       </td>
-      <td className="py-0.5 px-1 text-muted-foreground tabular-nums text-[11px] text-center">L{level.levelNumber}</td>
-      {actionCell}
+      <td className={cn("py-0.5 px-1 tabular-nums text-[11px] text-center", level.levelNumber > maxLvls ? "text-muted-foreground/40" : "text-green-400/90")}>L{level.levelNumber}</td>
+      {!hideIndividualLevelControls && actionCell}
       {statusCell}
     </tr>
   );
@@ -1407,6 +1419,7 @@ export function StreamRow({ stream }: StreamRowProps) {
     selectedStreamId,
     selectStream,
     launchStream,
+    applyChanges,
     launchLevel,
     pauseLevel,
     launchAllLevels,
@@ -1418,8 +1431,10 @@ export function StreamRow({ stream }: StreamRowProps) {
     launchingLevelKeys,
     missingPriceSourceStreamIds,
     clearMissingPriceSourceError,
+    manualPriceErrors,
     launchProgress,
     pauseProgress,
+    preferences,
   } = useStreamStore();
 
   const { defaultSpreads } = useDefaultSpreads();
@@ -1517,8 +1532,33 @@ export function StreamRow({ stream }: StreamRowProps) {
     launchingLevelKeys.has(`${stream.id}-ask-launch-all`) ||
     launchingLevelKeys.has(`${stream.id}-ask-pause-all`);
 
+  /** Pulse the alert banner when a launch attempt is blocked by any active alert condition */
+  const [alertPulse, setAlertPulse] = useState(false);
+  const handleAlertPulse = useCallback(() => {
+    setAlertPulse(true);
+    setTimeout(() => setAlertPulse(false), 600);
+  }, []);
+
+  /**
+   * Wrapped launchAllLevels: checks all blocking conditions before proceeding.
+   * On repeat attempts while an alert is already visible → pulse + abort.
+   * On first attempt → delegates to the store action (which sets the error state).
+   */
+  const handleLaunchAllLevels = useCallback(async (id: string, side: 'bid' | 'ask') => {
+    const blockedByHalt = stream.state === 'halted' && (stream.haltReason === 'ffch' || stream.haltReason === 'yield_crossing');
+    const blockedByMissingSource = missingPriceSourceStreamIds.has(id);
+    const blockedByManualPrice = manualPriceErrors.get(id) === side;
+    if (blockedByHalt || blockedByMissingSource || blockedByManualPrice) {
+      handleAlertPulse();
+      return;
+    }
+    await launchAllLevels(id, side);
+  }, [stream, missingPriceSourceStreamIds, manualPriceErrors, handleAlertPulse, launchAllLevels]);
+
   /** Check if this stream has the missing price source error */
   const hasMissingPriceSourceError = missingPriceSourceStreamIds.has(stream.id);
+  /** Which side failed to launch due to a missing manual price (undefined = no error) */
+  const manualPriceErrorSide = manualPriceErrors.get(stream.id);
 
   const handlePriceSourceChange = (value: string) => {
     const isManual = value === 'manual';
@@ -1839,16 +1879,16 @@ export function StreamRow({ stream }: StreamRowProps) {
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
-                  launchStream(stream.id);
+                  applyChanges(stream.id);
                 }}
                 disabled={launchingStreamIds.has(stream.id)}
                 className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 shrink-0 whitespace-nowrap"
-                title="Relaunch to apply changes"
+                title="Apply changes"
               >
                 {launchingStreamIds.has(stream.id) ? (
                   <Loader2 className="h-3 w-3 animate-spin shrink-0" aria-hidden />
                 ) : (
-                  'Relaunch'
+                  'Apply changes'
                 )}
               </Button>
             </div>
@@ -1866,8 +1906,8 @@ export function StreamRow({ stream }: StreamRowProps) {
                       await pauseAllLevels(stream.id, 'bid');
                       await pauseAllLevels(stream.id, 'ask');
                     } else {
-                      await launchAllLevels(stream.id, 'bid');
-                      await launchAllLevels(stream.id, 'ask');
+                      await handleLaunchAllLevels(stream.id, 'bid');
+                      await handleLaunchAllLevels(stream.id, 'ask');
                     }
                   }}
                   disabled={isGlobalToggleLoading}
@@ -1898,28 +1938,20 @@ export function StreamRow({ stream }: StreamRowProps) {
       {/* Missing Price Source Alert Banner */}
       {hasMissingPriceSourceError && (
         <div className="px-4 pb-2">
-          <div
-            role="alert"
-            className="flex items-center justify-between gap-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-red-500/10 text-red-500 dark:text-red-400 text-[11px] min-h-[28px] h-[30px]"
-            style={{ paddingLeft: '8px', paddingRight: '8px' }}
-          >
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate shrink-0">
-                Cannot launch: Please select a Price Source (QF or Manual) before launching this stream.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                clearMissingPriceSourceError(stream.id);
-              }}
-              className="text-red-400 hover:text-red-300 text-[10px] font-medium px-2 py-0.5 rounded hover:bg-red-500/20 transition-colors shrink-0"
-            >
-              Dismiss
-            </button>
-          </div>
+          <ValidationBanner
+            message="Cannot launch: Please select a Price Source (QF or Manual) before launching this stream."
+            pulsing={alertPulse}
+          />
+        </div>
+      )}
+
+      {/* Manual price missing banner - shown when user tries to launch a side without manual price set */}
+      {manualPriceErrorSide && (
+        <div className="px-4 pb-2">
+          <ValidationBanner
+            message={`Cannot launch ${manualPriceErrorSide.toUpperCase()}: Enter a manual ${manualPriceErrorSide} price to launch this side.`}
+            pulsing={alertPulse}
+          />
         </div>
       )}
 
@@ -1933,8 +1965,9 @@ export function StreamRow({ stream }: StreamRowProps) {
                 : stream.haltDetails
             }
             haltReason={stream.haltReason}
-            onRelaunch={() => launchStream(stream.id)}
+            onRelaunch={stream.haltReason !== 'ffch' && stream.haltReason !== 'yield_crossing' ? () => launchStream(stream.id) : undefined}
             isLaunching={launchingStreamIds.has(stream.id)}
+            pulsing={alertPulse}
           />
         </div>
       )}
@@ -1950,14 +1983,16 @@ export function StreamRow({ stream }: StreamRowProps) {
           updateStreamSet={updateStreamSet}
           formatNumber={formatNumber}
           launchStream={launchStream}
+          applyChanges={applyChanges}
           launchLevel={launchLevel}
           pauseLevel={pauseLevel}
-          launchAllLevels={launchAllLevels}
+          launchAllLevels={handleLaunchAllLevels}
           pauseAllLevels={pauseAllLevels}
           revertStagingChanges={revertStagingChanges}
           deleteStreamSet={deleteStreamSet}
           launchingStreamIds={launchingStreamIds}
           launchingLevelKeys={launchingLevelKeys}
+          hideIndividualLevelControls={preferences.hideIndividualLevelControls}
         />
       )}
       </div>

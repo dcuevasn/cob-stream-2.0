@@ -102,6 +102,7 @@ export interface UserPreferences {
   keyboardShortcutsEnabled: boolean;
   defaultLevels: number;
   toastNotificationsEnabled: boolean;
+  hideIndividualLevelControls: boolean;
 }
 
 export interface ValidationResult {

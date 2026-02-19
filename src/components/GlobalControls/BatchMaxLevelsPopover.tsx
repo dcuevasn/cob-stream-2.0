@@ -15,7 +15,7 @@ function clampMaxLvls(v: number): number {
   return Math.min(5, Math.max(0, v));
 }
 
-/** Parse and clamp from raw input - replace on keystroke behavior */
+/** Parse and clamp from raw input - used when Apply is clicked */
 function parseMaxLvls(raw: string): number {
   if (raw === '') return 0;
   const parsed = parseInt(raw, 10);
@@ -38,6 +38,7 @@ export function BatchMaxLevelsPopover() {
   const affectedCount = streams.length;
 
   // Initialize inputs from dominant/modal values when opening
+  // IMPORTANT: Only run on open state change, NOT when streams change (prevents input reset while typing)
   useEffect(() => {
     if (open && streams.length > 0) {
       const bidCounts = new Map<number, number>();
@@ -53,29 +54,40 @@ export function BatchMaxLevelsPopover() {
       setBidInput(String(dominantBid));
       setAskInput(String(dominantAsk));
     }
-  }, [open, streams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-    setBidInput(String(v));
+
+    // Allow empty string (user is clearing input)
+    if (raw === '') {
+      setBidInput('');
+      return;
+    }
+
+    // Parse and clamp to valid range 0-5
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed)) {
+      const clamped = Math.min(5, Math.max(0, parsed));
+      setBidInput(String(clamped));
+    }
   }, []);
 
   const handleAskChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-    setAskInput(String(v));
-  }, []);
 
-  const handleBidKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (/^[0-5]$/.test(e.key)) {
-      (e.target as HTMLInputElement).select();
+    // Allow empty string (user is clearing input)
+    if (raw === '') {
+      setAskInput('');
+      return;
     }
-  }, []);
 
-  const handleAskKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (/^[0-5]$/.test(e.key)) {
-      (e.target as HTMLInputElement).select();
+    // Parse and clamp to valid range 0-5
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed)) {
+      const clamped = Math.min(5, Math.max(0, parsed));
+      setAskInput(String(clamped));
     }
   }, []);
 
@@ -134,7 +146,6 @@ export function BatchMaxLevelsPopover() {
                 max={5}
                 value={bidInput}
                 onChange={handleBidChange}
-                onKeyDown={handleBidKeyDown}
                 onFocus={(e) => e.target.select()}
                 className={cn(
                   'w-14 h-7 px-2 text-center text-[11px] tabular-nums rounded border border-border bg-background',
@@ -151,7 +162,6 @@ export function BatchMaxLevelsPopover() {
                 max={5}
                 value={askInput}
                 onChange={handleAskChange}
-                onKeyDown={handleAskKeyDown}
                 onFocus={(e) => e.target.select()}
                 className={cn(
                   'w-14 h-7 px-2 text-center text-[11px] tabular-nums rounded border border-border bg-background',

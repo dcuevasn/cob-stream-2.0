@@ -297,11 +297,13 @@ function createStagingSnapshot(stream: StreamSet): StagingSnapshot {
   };
 }
 
-export type DemoStreamType = 'new_stream' | 'yield_crossing' | 'ffch' | 'staged' | 'unconfigured';
+export type DemoStreamType = 'new_stream' | 'yield_crossing' | 'ffch_bid' | 'ffch_ask' | 'staged' | 'unconfigured';
 
 // Generate additive demo streams that are appended to existing streams
 // Each stream has exactly 1 active level on BID and 1 on ASK (except when type specifies otherwise)
-// type: 'new_stream' = normal paused stream; 'yield_crossing' = halted with yield crossing; 'ffch' = halted with FFCH; 'staged' = active with pending edits; 'unconfigured' = empty state, no QF assigned
+// type: 'new_stream' = normal paused stream; 'yield_crossing' = halted with yield crossing;
+//       'ffch_bid' = BID halted with FFCH, ASK active; 'ffch_ask' = ASK halted with FFCH, BID active;
+//       'staged' = active with pending edits; 'unconfigured' = empty state, no QF assigned
 // securityTypeFilter: when provided and not 'All', only pick from securities of that type (context-aware for current view)
 export function generateAdditiveDemoStreams(
   count: number = 5,
@@ -370,6 +372,83 @@ export function generateAdditiveDemoStreams(
       };
     }
 
+    // Side-specific FFCH: one side halted, the other active with 2 levels
+    if (type === 'ffch_bid' || type === 'ffch_ask') {
+      const ffchQuoteFeeds = generateStreamQuoteFeeds(sec.referenceYield);
+      const ffchFeed = ffchQuoteFeeds[Math.floor(Math.random() * ffchQuoteFeeds.length)];
+      const qtyOpts = [500, 1000, 2000, 5000, 10000, 25000];
+      const bidQtyF = qtyOpts[Math.floor(Math.random() * qtyOpts.length)];
+      const askQtyF = qtyOpts[Math.floor(Math.random() * qtyOpts.length)];
+
+      const isBidHalted = type === 'ffch_bid';
+      const ffchDelta = 120; // |deltaBps| > FFCH_LIMIT_BPS (100)
+      const validDelta = (Math.floor(Math.random() * 10) + 1) * 0.5;
+
+      const bidBaseDelta = isBidHalted ? ffchDelta : validDelta;
+      const askBaseDelta = isBidHalted ? -validDelta : -ffchDelta;
+
+      const ffchYield = isBidHalted
+        ? (ffchFeed.bid + ffchDelta / 100).toFixed(3)
+        : (ffchFeed.ask - ffchDelta / 100).toFixed(3);
+      const haltDetails = isBidHalted
+        ? `FFCH [BID]: Yield ${ffchYield}% exceeds limit`
+        : `FFCH [ASK]: Yield ${ffchYield}% exceeds limit`;
+
+      const ffchStream: StreamSet = {
+        id: `ss-demo-${Date.now()}-${i}-${sec.alias}`,
+        securityId: `sec-demo-${Date.now()}-${i}`,
+        securityName: sec.name,
+        securityAlias: sec.alias,
+        securityISIN: sec.isin,
+        securityType: sec.type,
+        maturityDate: sec.maturity,
+        couponRate: sec.couponRate,
+        state: 'halted',
+        haltReason: 'ffch',
+        haltDetails,
+        levels: 5,
+        priceMode: 'quantity',
+        quoteFeedId: ffchFeed.feedId,
+        quoteFeedName: ffchFeed.feedName,
+        quoteFeeds: ffchQuoteFeeds,
+        selectedPriceSource: ffchFeed.feedId,
+        referencePrice: {
+          source: 'live',
+          value: ffchFeed.bid,
+          timestamp: new Date().toISOString(),
+          isOverride: false,
+        },
+        bid: {
+          isActive: !isBidHalted,
+          levelsToLaunch: isBidHalted ? 0 : 2,
+          maxLvls: isBidHalted ? 1 : 2,
+          spreadMatrix: Array.from({ length: 5 }, (_, lvl) => ({
+            levelNumber: lvl + 1,
+            deltaBps: bidBaseDelta + lvl * 0.5,
+            quantity: bidQtyF,
+          })),
+          state: isBidHalted ? 'halted' : 'active',
+        },
+        ask: {
+          isActive: isBidHalted,
+          levelsToLaunch: isBidHalted ? 2 : 0,
+          maxLvls: isBidHalted ? 2 : 1,
+          spreadMatrix: Array.from({ length: 5 }, (_, lvl) => ({
+            levelNumber: lvl + 1,
+            deltaBps: askBaseDelta - lvl * 0.5,
+            quantity: askQtyF,
+          })),
+          state: isBidHalted ? 'active' : 'halted',
+        },
+      };
+
+      return {
+        ...ffchStream,
+        hasStagingChanges: false,
+        lastLaunchedSnapshot: createStagingSnapshot(ffchStream),
+      };
+    }
+
     // Generate per-stream quote feeds
     const quoteFeeds = generateStreamQuoteFeeds(sec.referenceYield);
     const selectedFeedIndex = Math.floor(Math.random() * quoteFeeds.length);
@@ -402,10 +481,6 @@ export function generateAdditiveDemoStreams(
       // bidDelta negative, askDelta positive so askYield > bidYield
       bidBaseDelta = -80; // bid level 1: -79.5
       askBaseDelta = 80;  // ask level 1: 79.5 -> askYield = askValue + 0.795 > bidYield = bidValue - 0.795
-    } else if (type === 'ffch') {
-      // |deltaBps| > 100 triggers FFCH
-      bidBaseDelta = 120;  // level 1: 120.5 > 100
-      askBaseDelta = -(Math.floor(Math.random() * 10) + 1) * 0.5;
     } else {
       bidBaseDelta = (Math.floor(Math.random() * 10) + 1) * 0.5;
       askBaseDelta = -(Math.floor(Math.random() * 10) + 1) * 0.5;
@@ -420,10 +495,6 @@ export function generateAdditiveDemoStreams(
       state = 'halted';
       haltReason = 'yield_crossing';
       haltDetails = 'Yield crossing: Bid yield ≤ Ask yield (inverted spread)';
-    } else if (type === 'ffch') {
-      state = 'halted';
-      haltReason = 'ffch';
-      haltDetails = 'FFCH crossed: Price exceeds hard limit threshold';
     } else if (type === 'staged') {
       state = 'active'; // Active with staging changes
       haltReason = undefined;

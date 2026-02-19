@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, FlaskConical } from 'lucide-react';
+import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, FlaskConical, EyeOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { SearchBar } from './SearchBar';
@@ -36,6 +37,8 @@ export function Toolbar() {
     launchProgress,
     pauseAllWithProgress,
     pauseProgress,
+    preferences,
+    setPreferences,
   } = useStreamStore();
 
   const isBatchLaunching = launchingStreamIds.size > 0 || (launchProgress?.isActive ?? false);
@@ -146,14 +149,19 @@ export function Toolbar() {
             <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
             New Stream
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('ffch_bid')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            FFCH Alert (BID only)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('ffch_ask')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            FFCH Alert (ASK only)
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => generateDemoData('yield_crossing')}>
             <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
-            Stream with Yield Crossing Alert
+            Yield Crossing Alert
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => generateDemoData('ffch')}>
-            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
-            Stream with FFCH Alert
-          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => generateDemoData('staged')}>
             <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
             Staged Stream
@@ -162,6 +170,14 @@ export function Toolbar() {
             <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
             Unconfigured Stream
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={preferences.hideIndividualLevelControls}
+            onCheckedChange={(checked) => setPreferences({ hideIndividualLevelControls: checked })}
+          >
+            <EyeOff className="h-4 w-4 mr-2 text-muted-foreground" />
+            Hide individual level controls
+          </DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -326,14 +342,19 @@ export function Toolbar() {
         <FlaskConical className="h-4 w-4" />
         New Stream
       </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => generateDemoData('ffch_bid')}>
+        <FlaskConical className="h-4 w-4" />
+        FFCH Alert (BID only)
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => generateDemoData('ffch_ask')}>
+        <FlaskConical className="h-4 w-4" />
+        FFCH Alert (ASK only)
+      </DropdownMenuItem>
       <DropdownMenuItem onClick={() => generateDemoData('yield_crossing')}>
         <FlaskConical className="h-4 w-4" />
-        Stream with Yield Crossing Alert
+        Yield Crossing Alert
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => generateDemoData('ffch')}>
-        <FlaskConical className="h-4 w-4" />
-        Stream with FFCH Alert
-      </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuItem onClick={() => generateDemoData('staged')}>
         <FlaskConical className="h-4 w-4" />
         Staged Stream
@@ -342,6 +363,14 @@ export function Toolbar() {
         <FlaskConical className="h-4 w-4" />
         Unconfigured Stream
       </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuCheckboxItem
+        checked={preferences.hideIndividualLevelControls}
+        onCheckedChange={(checked) => setPreferences({ hideIndividualLevelControls: checked })}
+      >
+        <EyeOff className="h-4 w-4" />
+        Hide individual level controls
+      </DropdownMenuCheckboxItem>
       <DropdownMenuSeparator />
       <DropdownMenuLabel>Spread adjustments</DropdownMenuLabel>
       <DropdownMenuItem onClick={() => adjustSpreadBid(-0.5)}>
