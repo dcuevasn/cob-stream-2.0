@@ -753,7 +753,7 @@ function ExpandedLevelsTable({
       style={{ paddingLeft: '12px', paddingRight: '12px', paddingBottom: '12px' }}
       onClick={(e) => e.stopPropagation()}
     >
-      {stream.hasStagingChanges && stream.lastLaunchedSnapshot && (
+      {stream.hasStagingChanges && (
         <div
           role="alert"
           className="flex items-center justify-between gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] min-h-[28px] h-[30px]"
@@ -1593,13 +1593,22 @@ export function StreamRow({ stream }: StreamRowProps) {
         },
       });
     } else {
-      // Manual: Use snapshot values if available to avoid triggering blue highlight on mode switch
-      // Otherwise fall back to current values (quote feed or existing manual values)
-      const snapshotBid = snapshot?.referencePrice.manualBid ?? snapshot?.referencePrice.value;
-      const snapshotAsk = snapshot?.referencePrice.manualAsk ?? snapshot?.referencePrice.value;
+      // Manual: when switching FROM a QF feed, seed manual inputs with the current live
+      // QF prices so the user starts from market values. Otherwise (re-selecting manual
+      // or no prior source) preserve snapshot/stored values to avoid spurious staging.
+      let currentBid: number | undefined;
+      let currentAsk: number | undefined;
 
-      const currentBid = snapshotBid ?? selectedFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
-      const currentAsk = snapshotAsk ?? selectedFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
+      if (selectedFeed) {
+        // Coming from a QF: use live prices as starting point
+        currentBid = selectedFeed.bid;
+        currentAsk = selectedFeed.ask;
+      } else {
+        const snapshotBid = snapshot?.referencePrice.manualBid ?? snapshot?.referencePrice.value;
+        const snapshotAsk = snapshot?.referencePrice.manualAsk ?? snapshot?.referencePrice.value;
+        currentBid = snapshotBid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
+        currentAsk = snapshotAsk ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
+      }
 
       updateStreamSet(stream.id, {
         ...stateUpdate,
