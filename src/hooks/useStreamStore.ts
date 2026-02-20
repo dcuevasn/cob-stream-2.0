@@ -66,6 +66,7 @@ interface StreamStore {
   // Staging revert
   revertStagingChanges: (id: string) => void;
   batchRevertStagingChanges: () => void;
+  batchApplyChanges: () => Promise<void>;
 
   // Price source validation
   clearMissingPriceSourceError: (id: string) => void;
@@ -128,7 +129,9 @@ function createStagingSnapshot(stream: StreamSet): StagingSnapshot {
   };
 }
 
-/** Create side-specific snapshot: updates specified side, preserves other side from existing snapshot */
+/** Create side-specific snapshot: updates specified side, preserves other side from existing snapshot.
+ * Global fields (referencePrice, selectedPriceSource, priceMode) always use current stream values —
+ * they are shared between both sides, so launching either side commits them. */
 function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnapshot {
   const existingSnapshot = stream.lastLaunchedSnapshot;
 
@@ -137,24 +140,29 @@ function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnap
     return createStagingSnapshot(stream);
   }
 
-  // Update only the specified side, preserve the other side from existing snapshot
+  // Always commit global fields from the current stream. Only the OTHER side's
+  // spread/qty matrix is preserved from the existing snapshot.
   if (side === 'bid') {
     return {
-      ...existingSnapshot,
+      selectedPriceSource: stream.selectedPriceSource || 'manual',
+      priceMode: stream.priceMode,
+      referencePrice: { ...stream.referencePrice },
       bid: {
         spreadMatrix: stream.bid.spreadMatrix.map(({ levelNumber, deltaBps, quantity }) => ({ levelNumber, deltaBps, quantity })),
         maxLvls: stream.bid.maxLvls ?? 1,
       },
-      // ASK side preserved from existing snapshot
+      ask: existingSnapshot.ask,
     };
   } else {
     return {
-      ...existingSnapshot,
+      selectedPriceSource: stream.selectedPriceSource || 'manual',
+      priceMode: stream.priceMode,
+      referencePrice: { ...stream.referencePrice },
+      bid: existingSnapshot.bid,
       ask: {
         spreadMatrix: stream.ask.spreadMatrix.map(({ levelNumber, deltaBps, quantity }) => ({ levelNumber, deltaBps, quantity })),
         maxLvls: stream.ask.maxLvls ?? 1,
       },
-      // BID side preserved from existing snapshot
     };
   }
 }
@@ -162,7 +170,26 @@ function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnap
 function checkStagingRevert(id: string) {
   const { streamSets, updateStreamSet } = useStreamStore.getState();
   const stream = streamSets.find((ss) => ss.id === id);
-  if (!stream?.hasStagingChanges || !stream.lastLaunchedSnapshot) return;
+  if (!stream?.hasStagingChanges) return;
+
+  if (!stream.lastLaunchedSnapshot) {
+    // No snapshot yet (unconfigured stream). For manual source: only suppress
+    // the staged banner if the user hasn't entered a valid price yet — this
+    // prevents the banner from appearing just from selecting the Manual source.
+    if (stream.selectedPriceSource === 'manual') {
+      const hasValidManualPrice =
+        (stream.referencePrice.manualBid != null && stream.referencePrice.manualBid !== 0) ||
+        (stream.referencePrice.manualAsk != null && stream.referencePrice.manualAsk !== 0);
+      if (!hasValidManualPrice) {
+        updateStreamSet(id, { hasStagingChanges: false }, { skipStaging: true });
+      }
+    } else {
+      // Non-manual source on unconfigured stream: no snapshot to diff against, suppress staging.
+      updateStreamSet(id, { hasStagingChanges: false }, { skipStaging: true });
+    }
+    return;
+  }
+
   if (stagingConfigEquals(stream, stream.lastLaunchedSnapshot)) {
     updateStreamSet(id, { hasStagingChanges: false });
   }
@@ -1324,6 +1351,13 @@ export const useStreamStore = create<StreamStore>()(
 
           return { streamSets: nextStreamSets };
         });
+      },
+
+      /** Apply staged changes for all staged streams in current view. */
+      batchApplyChanges: async () => {
+        const { getFilteredStreamSets, applyChanges } = get();
+        const stagedStreams = getFilteredStreamSets().filter((s) => s.hasStagingChanges);
+        await Promise.all(stagedStreams.map((s) => applyChanges(s.id)));
       },
 
       adjustSpreadBid: (delta) => {

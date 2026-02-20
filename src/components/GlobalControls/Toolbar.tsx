@@ -32,6 +32,7 @@ export function Toolbar() {
     launchingStreamIds,
     getFilteredStreamSets,
     batchRevertStagingChanges,
+    batchApplyChanges,
     hasStagedStreamsInView,
     launchAllWithProgress,
     launchProgress,
@@ -80,6 +81,7 @@ export function Toolbar() {
   const haltedCount = filteredStreams.filter((s) => s.state === 'halted').length;
 
   const [isReverting, setIsReverting] = React.useState(false);
+  const [isApplying, setIsApplying] = React.useState(false);
 
   const hasStagedStreams = hasStagedStreamsInView();
 
@@ -89,6 +91,16 @@ export function Toolbar() {
     batchRevertStagingChanges();
     setTimeout(() => setIsReverting(false), 200);
   }, [batchRevertStagingChanges, isReverting, hasStagedStreams]);
+
+  const handleBatchApply = React.useCallback(async () => {
+    if (isApplying || !hasStagedStreams) return;
+    setIsApplying(true);
+    try {
+      await batchApplyChanges();
+    } finally {
+      setIsApplying(false);
+    }
+  }, [batchApplyChanges, isApplying, hasStagedStreams]);
 
   const handlePauseAll = React.useCallback(async () => {
     if (isBatchPausing) return;
@@ -298,20 +310,24 @@ export function Toolbar() {
     <>
       {hasStagedStreams && (
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleBatchRevert}
-            disabled={isReverting}
-            title="Cancel all staged changes"
-          >
-            {isReverting ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <RotateCcw data-icon="inline-start" />
-            )}
-            {!isCompact && 'Cancel changes'}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 w-fit min-w-0"
+              onClick={handleBatchRevert}
+              disabled={isReverting}
+              title="Cancel all staged changes"
+            >
+              {isReverting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Cancel edits'}
+            </Button>
+            <Button
+              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 shrink-0 w-fit min-w-0"
+              onClick={handleBatchApply}
+              disabled={isApplying}
+              title="Apply all staged changes"
+            >
+              {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply changes'}
+            </Button>
+          </div>
           <div className="h-6 w-px bg-border shrink-0" />
         </>
       )}
@@ -331,7 +347,15 @@ export function Toolbar() {
             ) : (
               <RotateCcw className="h-4 w-4 shrink-0" />
             )}
-            Cancel changes
+            Cancel edits (all)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleBatchApply} disabled={isApplying}>
+            {isApplying ? (
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            ) : (
+              <Play className="h-4 w-4 shrink-0" />
+            )}
+            Apply changes (all)
           </DropdownMenuItem>
           <DropdownMenuSeparator />
         </>
