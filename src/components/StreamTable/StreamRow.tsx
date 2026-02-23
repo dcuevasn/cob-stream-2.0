@@ -785,7 +785,7 @@ function ExpandedLevelsTable({
           className="flex items-center justify-between gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] min-h-[28px] h-[30px]"
           style={{ paddingLeft: '8px', paddingRight: '8px' }}
         >
-          <span className="truncate shrink-0">Staged changes — click apply to update.</span>
+          <span className="truncate shrink-0">Applies staged changes. Relaunches active streams only.</span>
           <div className="flex items-center gap-1.5 shrink-0">
             {stream.lastLaunchedSnapshot && (
               <Button
