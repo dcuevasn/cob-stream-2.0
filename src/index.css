@@ -56,6 +56,8 @@
   --status-halted: hsl(38 92% 50%);
   --status-cancelled: hsl(0 0% 45%);
   --status-unconfigured: hsl(0 0% 35%);
+  --status-bid-active: hsl(142 76% 36%);   /* green — bid side active */
+  --status-ask-active: hsl(0 72% 51%);     /* red — ask side active */
 
   /* Price colors */
   --price-up: hsl(142 76% 36%);
@@ -149,9 +151,9 @@ body {
   background-color: color-mix(in srgb, var(--muted) 25%, transparent);
 }
 
-/* Staging state background */
+/* Staging state — left border indicator only, no background fill */
 .staging-bg {
-  background-color: color-mix(in srgb, var(--status-staging) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--status-staging);
 }
 
 /* Paused state background */

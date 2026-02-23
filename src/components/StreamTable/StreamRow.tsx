@@ -7,6 +7,7 @@ import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +16,7 @@ import {
 import { PriceSourceCombobox } from './PriceSourceCombobox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
-import { StatusBadge } from '../StateIndicators/StatusBadge';
+import { SidedStatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
 import { SpreadStepSettings } from './SpreadStepSettings';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
@@ -273,24 +274,31 @@ function BatchQtyHeader({
   onBatchApply: (side: 'bid' | 'ask', quantity: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const oppositeSide = side === 'bid' ? 'ask' : 'bid';
   const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
+  const oppositeMatrix = side === 'bid' ? stream.ask.spreadMatrix : stream.bid.spreadMatrix;
   const currentQty = matrix[0]?.quantity ?? 1000;
   const [inputValue, setInputValue] = useState(currentQty.toString());
+  const [applyToBoth, setApplyToBoth] = useState(false);
 
   useEffect(() => {
     if (open) {
       setInputValue(currentQty.toString());
+      setApplyToBoth(false);
     }
   }, [open, currentQty]);
 
   const parsed = parseInt(inputValue.replace(/[^0-9]/g, ''), 10);
   const isValid = !isNaN(parsed) && parsed >= MIN_QUANTITY && parsed <= MAX_QUANTITY;
-  const wouldChange = matrix.some((l) => l.quantity !== parsed);
+  const wouldChangeSide = matrix.some((l) => l.quantity !== parsed);
+  const wouldChangeOppSide = oppositeMatrix.some((l) => l.quantity !== parsed);
+  const wouldChange = applyToBoth ? wouldChangeSide || wouldChangeOppSide : wouldChangeSide;
   const canApply = isValid && wouldChange;
 
   const handleApply = () => {
     if (!canApply) return;
     onBatchApply(side, parsed);
+    if (applyToBoth) onBatchApply(oppositeSide, parsed);
     setOpen(false);
   };
 
@@ -327,13 +335,13 @@ function BatchQtyHeader({
         )}
       >
         <div role="group" aria-label={`Set ${volumeLabel} (All Levels)`} className="flex flex-col">
-          {/* Title - smaller weight, bottom margin */}
+          {/* Title */}
           <h3 className="text-sm font-medium text-muted-foreground mb-4">
             Set {volumeLabel} (All Levels)
           </h3>
 
-          {/* Input section - label 8px above input */}
-          <label className="flex flex-col gap-2 mb-5">
+          {/* Input section */}
+          <label className="flex flex-col gap-2 mb-4">
             <span className="text-[11px] font-medium text-muted-foreground">{volumeLabel}</span>
             <input
               type="text"
@@ -356,7 +364,25 @@ function BatchQtyHeader({
             )}
           </label>
 
-          {/* Button section - compact, right-aligned */}
+          {/* Opposite-side checkbox */}
+          <div
+            className="flex items-center gap-2 mb-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              id={`apply-both-${side}`}
+              checked={applyToBoth}
+              onCheckedChange={(checked) => setApplyToBoth(checked === true)}
+            />
+            <label
+              htmlFor={`apply-both-${side}`}
+              className="text-[11px] text-muted-foreground cursor-pointer select-none"
+            >
+              Also apply to {oppositeSide.toUpperCase()} side
+            </label>
+          </div>
+
+          {/* Button section */}
           <div className="flex items-center gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={handleCancel} className="h-7 px-2.5 text-[11px]">
               Cancel
@@ -1670,7 +1696,14 @@ export function StreamRow({ stream }: StreamRowProps) {
                 <ChevronRight className="h-3 w-3" />
               )}
             </Button>
-            <StatusBadge state={statusDisplayState} haltDetails={stream.haltDetails} isLoading={isStreamProcessing} />
+            <SidedStatusBadge
+                state={stream.state}
+                haltReason={stream.haltReason}
+                haltDetails={stream.haltDetails}
+                bidActiveCount={bidActiveCount}
+                askActiveCount={askActiveCount}
+                isLoading={isStreamProcessing}
+              />
           </div>
 
           {/* Name - color coded by state: yellow for alerts, blue for staged, default otherwise */}
@@ -1865,7 +1898,6 @@ export function StreamRow({ stream }: StreamRowProps) {
             ACTIONS_COLUMN_WIDTH,
             // Match row background state
             isExpanded ? 'bg-[color-mix(in_srgb,var(--muted)_25%,transparent)]' :
-            stream.state === 'staging' ? 'bg-[color-mix(in_srgb,var(--status-staging)_10%,transparent)]' :
             stream.state === 'paused' ? 'bg-[color-mix(in_srgb,var(--status-paused)_10%,transparent)]' :
             stream.state === 'halted' ? 'bg-[color-mix(in_srgb,var(--status-halted)_10%,transparent)]' :
             'bg-background'

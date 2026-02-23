@@ -4,6 +4,7 @@ import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnap
 import { generateInitialStreamSets, generateRandomDemoData, generateStreamQuoteFeeds, generateAdditiveDemoStreams, type DemoStreamType } from '../mocks/mockData';
 import { simulateLaunch, simulateStopStream, validateStreamSet } from '../mocks/mockValidations';
 import { stagingConfigEquals, getActiveLevelCount } from '../lib/utils';
+import type { SecurityCatalogItem } from '../mocks/securityCatalog';
 
 interface StreamStore {
   // State
@@ -55,6 +56,7 @@ interface StreamStore {
   stopAllInView: () => Promise<void>;
   pauseAllInView: () => void;
   addStreamSet: (securityType: SecurityType) => void;
+  addSecuritiesBatch: (securities: SecurityCatalogItem[]) => void;
   deleteStreamSet: (id: string) => void;
   configureStream: (id: string, config: Partial<StreamSet>) => void;
 
@@ -62,6 +64,7 @@ interface StreamStore {
   batchUpdatePriceSource: (selectedPriceSource: string, securityType?: SecurityType) => void;
   batchUpdatePriceMode: (priceMode: 'quantity' | 'notional', securityType?: SecurityType) => void;
   batchUpdateMaxLvls: (bidMaxLvls: number, askMaxLvls: number) => void;
+  batchUpdateQty: (bidQty: number, askQty: number) => void;
 
   // Staging revert
   revertStagingChanges: (id: string) => void;
@@ -1071,6 +1074,62 @@ export const useStreamStore = create<StreamStore>()(
         set({ streamSets: [...streamSets, newStream], selectedStreamId: newId });
       },
 
+      addSecuritiesBatch: (securities) => {
+        const { streamSets, preferences } = get();
+        const now = Date.now();
+        const levels = preferences.defaultLevels || 5;
+
+        const newStreams: StreamSet[] = securities.map((sec, i) => {
+          const id = `ss-${sec.id}-${now + i}`;
+          const quoteFeeds = generateStreamQuoteFeeds();
+          return {
+            id,
+            securityId: sec.id,
+            securityName: sec.name,
+            securityAlias: sec.alias,
+            securityISIN: sec.isin,
+            securityType: sec.type,
+            maturityDate: sec.maturity,
+            couponRate: sec.couponRate,
+            state: 'unconfigured',
+            levels,
+            priceMode: 'quantity',
+            quoteFeedId: undefined,
+            quoteFeedName: undefined,
+            quoteFeeds,
+            selectedPriceSource: 'manual',
+            referencePrice: {
+              source: 'manual',
+              value: 0,
+              timestamp: new Date().toISOString(),
+              isOverride: false,
+            },
+            bid: {
+              isActive: false,
+              levelsToLaunch: 0,
+              maxLvls: 1,
+              spreadMatrix: Array.from({ length: levels }, (_, idx) => ({
+                levelNumber: idx + 1,
+                deltaBps: (idx + 1) * 0.5,
+                quantity: 1000,
+              })),
+            },
+            ask: {
+              isActive: false,
+              levelsToLaunch: 0,
+              maxLvls: 1,
+              spreadMatrix: Array.from({ length: levels }, (_, idx) => ({
+                levelNumber: idx + 1,
+                deltaBps: -(idx + 1) * 0.5,
+                quantity: 1000,
+              })),
+            },
+          };
+        });
+
+        set({ streamSets: [...streamSets, ...newStreams] });
+      },
+
       deleteStreamSet: (id) =>
         set((state) => ({
           streamSets: state.streamSets.filter((ss) => ss.id !== id),
@@ -1230,6 +1289,19 @@ export const useStreamStore = create<StreamStore>()(
           updateStreamSet(stream.id, {
             bid: { ...stream.bid, maxLvls: bidMaxLvls },
             ask: { ...stream.ask, maxLvls: askMaxLvls },
+          });
+        });
+      },
+
+      batchUpdateQty: (bidQty, askQty) => {
+        const { getFilteredStreamSets, updateStreamSet } = get();
+        const streams = getFilteredStreamSets();
+        streams.forEach((stream) => {
+          const newBidMatrix = stream.bid.spreadMatrix.map((l) => ({ ...l, quantity: bidQty }));
+          const newAskMatrix = stream.ask.spreadMatrix.map((l) => ({ ...l, quantity: askQty }));
+          updateStreamSet(stream.id, {
+            bid: { ...stream.bid, spreadMatrix: newBidMatrix },
+            ask: { ...stream.ask, spreadMatrix: newAskMatrix },
           });
         });
       },
@@ -1989,7 +2061,11 @@ export const useStreamStore = create<StreamStore>()(
 
       hasStagedStreamsInView: () => {
         const streams = get().getFilteredStreamSets();
-        return streams.some(isStreamStaging);
+        // Only true when streams have actual pending edits — drives Cancel/Apply action buttons.
+        // Intentionally excludes streams that are in 'staging'/'halted' state but have no
+        // pending edits (hasStagingChanges: false), which would be a false positive because
+        // batchRevertStagingChanges and batchApplyChanges both guard on hasStagingChanges too.
+        return streams.some((s) => !!s.hasStagingChanges);
       },
     }),
     {

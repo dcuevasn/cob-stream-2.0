@@ -1,6 +1,7 @@
 import React from 'react';
 import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, FlaskConical, EyeOff } from 'lucide-react';
 import { Button } from '../ui/button';
+import { AddSecurityDialog } from './AddSecurityDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { SearchBar } from './SearchBar';
 import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
+import { BatchSizePopover } from './BatchSizePopover';
 import { LaunchProgressPopover } from './LaunchProgressPopover';
 import { PauseProgressPopover } from './PauseProgressPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
@@ -27,7 +29,6 @@ export function Toolbar() {
   const {
     adjustSpreadBid,
     adjustSpreadAsk,
-    addStreamSet,
     generateDemoData,
     launchingStreamIds,
     getFilteredStreamSets,
@@ -68,9 +69,8 @@ export function Toolbar() {
   const inactiveCount = filteredStreams.filter(
     (s) => s.state !== 'active' && s.state !== 'paused'
   ).length;
-  const stagingCount = filteredStreams.filter(
-    (s) => s.state === 'staging' || s.state === 'halted' || (s.state === 'active' && s.hasStagingChanges)
-  ).length;
+  // Only streams with actual pending edits — mirrors the blue row highlight driven by hasStagingChanges
+  const stagingCount = filteredStreams.filter((s) => !!s.hasStagingChanges).length;
   const launchableCount = filteredStreams.filter(
     (s) =>
       s.state === 'staging' ||
@@ -193,20 +193,7 @@ export function Toolbar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="default"
-            size={isCompact ? 'icon-sm' : 'sm'}
-            onClick={() => addStreamSet('M Bono')}
-            className={cn('gap-1 shrink-0 px-3 w-fit h-7', isCompact && 'h-8 min-w-8')}
-          >
-            <Plus className="h-4 w-4" />
-            {!isCompact && <span className="truncate max-w-[120px]">Add security</span>}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Add security</TooltipContent>
-      </Tooltip>
+      <AddSecurityDialog />
 
       {/* Stop All Dropdown */}
       <DropdownMenu>
@@ -332,6 +319,7 @@ export function Toolbar() {
         </>
       )}
       <BatchMaxLevelsPopover />
+      <BatchSizePopover />
       <div className="h-6 w-px bg-border shrink-0" />
       <UserSettings />
     </>
@@ -505,7 +493,7 @@ export function Toolbar() {
                   <span className="text-gray-500 truncate">{inactiveCount} Inactive</span>
                 </span>
               )}
-              {hasStagedStreams && (
+              {stagingCount > 0 && (
                 <span className="flex items-center gap-1 min-w-0 hidden sm:flex">
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-staging)] shrink-0" />
                   <span className="text-[var(--status-staging)] truncate">{stagingCount} Staging</span>
