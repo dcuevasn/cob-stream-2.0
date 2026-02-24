@@ -65,7 +65,6 @@ export function Toolbar() {
     { activeStreamsCount: 0, activeOrdersCount: 0 }
   );
 
-  const pausedCount = filteredStreams.filter((s) => s.state === 'paused').length;
   const inactiveCount = filteredStreams.filter(
     (s) => s.state !== 'active' && s.state !== 'paused'
   ).length;
@@ -461,7 +460,7 @@ export function Toolbar() {
               'flex items-center min-h-[24px] w-full mt-2 pt-2 border-t border-border/50 bg-muted/20',
               'justify-end'
             )}
-            title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${pausedCount > 0 ? `, ${pausedCount} Stopped` : ''}${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
+            title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
           >
             <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-muted-foreground shrink-0">
               {/* Only show active indicators when there are active streams */}
@@ -480,12 +479,6 @@ export function Toolbar() {
                     </span>
                   </span>
                 </>
-              )}
-              {pausedCount > 0 && (
-                <span className="flex items-center gap-1 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-paused)] shrink-0" />
-                  <span className="text-[var(--status-paused)] truncate">{pausedCount} Stopped</span>
-                </span>
               )}
               {inactiveCount > 0 && (
                 <span className="flex items-center gap-1 min-w-0">
