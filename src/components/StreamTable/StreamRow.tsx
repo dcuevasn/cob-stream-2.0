@@ -13,7 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { PriceSourceCombobox } from './PriceSourceCombobox';
+import { PriceSourceCombobox, type MixedSourceState } from './PriceSourceCombobox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
 import { SidedStatusBadge } from '../StateIndicators/StatusBadge';
@@ -252,6 +252,143 @@ function LiveBidAskDisplay({
           <TooltipContent side="top" className="text-xs">
             {formatTimestamp(effectiveAskTimestamp)}
           </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+/** Per-side price source selectors with inline price display — shown when independentPriceSources flag is ON */
+function IndependentPriceSourcesPanel({
+  stream,
+  updateStreamSet,
+  formatNumber,
+}: {
+  stream: StreamSet;
+  updateStreamSet: (id: string, updates: Partial<StreamSet>) => void;
+  formatNumber: (n: number, d?: number) => string;
+}) {
+  const effectiveBidSource = stream.bidSelectedPriceSource ?? stream.selectedPriceSource;
+  const effectiveAskSource = stream.askSelectedPriceSource ?? stream.selectedPriceSource;
+
+  const indepSnapshot = stream.lastLaunchedSnapshot;
+  const snapBidSrc = indepSnapshot?.bidSelectedPriceSource ?? indepSnapshot?.selectedPriceSource;
+  const snapAskSrc = indepSnapshot?.askSelectedPriceSource ?? indepSnapshot?.selectedPriceSource;
+  const isBidSourceStaged = !!indepSnapshot && effectiveBidSource !== snapBidSrc;
+  const isAskSourceStaged = !!indepSnapshot && effectiveAskSource !== snapAskSrc;
+
+  const bidFeed = stream.quoteFeeds?.find(f => f.feedId === effectiveBidSource);
+  const askFeed = stream.quoteFeeds?.find(f => f.feedId === effectiveAskSource);
+  const isBidManual = effectiveBidSource === 'manual' || !effectiveBidSource;
+  const isAskManual = effectiveAskSource === 'manual' || !effectiveAskSource;
+
+  const bidVal = bidFeed?.bid ?? stream.bidReferencePrice?.manualBid ?? stream.referencePrice.value;
+  const askVal = askFeed?.ask ?? stream.askReferencePrice?.manualAsk ?? stream.referencePrice.value;
+
+  const [bidInput, setBidInput] = useState(formatNumber(bidVal));
+  const [askInput, setAskInput] = useState(formatNumber(askVal));
+
+  useEffect(() => { setBidInput(formatNumber(bidVal)); }, [bidVal, formatNumber]);
+  useEffect(() => { setAskInput(formatNumber(askVal)); }, [askVal, formatNumber]);
+
+  const handleBidSourceChange = useCallback((value: string) => {
+    if (value === 'manual') {
+      const seed = bidFeed?.bid ?? stream.referencePrice.value;
+      updateStreamSet(stream.id, {
+        bidSelectedPriceSource: 'manual',
+        bidReferencePrice: { source: 'manual', value: seed, timestamp: new Date().toISOString(), isOverride: false, manualBid: seed },
+      });
+    } else {
+      const feed = stream.quoteFeeds?.find(f => f.feedId === value);
+      if (feed) {
+        updateStreamSet(stream.id, {
+          bidSelectedPriceSource: value,
+          bidReferencePrice: { source: 'live', value: feed.bid, timestamp: new Date().toISOString(), isOverride: false },
+        });
+      }
+    }
+  }, [stream, updateStreamSet, bidFeed]);
+
+  const handleAskSourceChange = useCallback((value: string) => {
+    if (value === 'manual') {
+      const seed = askFeed?.ask ?? stream.referencePrice.value;
+      updateStreamSet(stream.id, {
+        askSelectedPriceSource: 'manual',
+        askReferencePrice: { source: 'manual', value: seed, timestamp: new Date().toISOString(), isOverride: false, manualAsk: seed },
+      });
+    } else {
+      const feed = stream.quoteFeeds?.find(f => f.feedId === value);
+      if (feed) {
+        updateStreamSet(stream.id, {
+          askSelectedPriceSource: value,
+          askReferencePrice: { source: 'live', value: feed.ask, timestamp: new Date().toISOString(), isOverride: false },
+        });
+      }
+    }
+  }, [stream, updateStreamSet, askFeed]);
+
+  const commitBid = useCallback(() => {
+    const n = parseFloat(bidInput);
+    if (!isNaN(n) && n >= 0) {
+      updateStreamSet(stream.id, {
+        bidReferencePrice: { ...(stream.bidReferencePrice ?? stream.referencePrice), source: 'manual', value: n, timestamp: new Date().toISOString(), isOverride: false, manualBid: n },
+      });
+    } else { setBidInput(formatNumber(bidVal)); }
+  }, [bidInput, stream, updateStreamSet, formatNumber, bidVal]);
+
+  const commitAsk = useCallback(() => {
+    const n = parseFloat(askInput);
+    if (!isNaN(n) && n >= 0) {
+      updateStreamSet(stream.id, {
+        askReferencePrice: { ...(stream.askReferencePrice ?? stream.referencePrice), source: 'manual', value: n, timestamp: new Date().toISOString(), isOverride: false, manualAsk: n },
+      });
+    } else { setAskInput(formatNumber(askVal)); }
+  }, [askInput, stream, updateStreamSet, formatNumber, askVal]);
+
+  const handleKD = (e: React.KeyboardEvent, commit: () => void) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } };
+
+  return (
+    <div className="flex items-center gap-4 flex-wrap" role="group" aria-label="Independent price sources">
+      {/* BID */}
+      <div className="flex items-center gap-1.5">
+        <label className="text-[10px] font-medium text-green-400 uppercase tracking-wider shrink-0">BID</label>
+        <PriceSourceCombobox value={effectiveBidSource} quoteFeeds={stream.quoteFeeds ?? []} onValueChange={handleBidSourceChange} className={cn(isBidSourceStaged && 'text-blue-400 bg-blue-500/10')} />
+        {isBidManual ? (
+          <input type="text" inputMode="decimal" value={bidInput}
+            onChange={(e) => setBidInput(e.target.value.replace(/[^0-9.-]/g, ''))}
+            onBlur={commitBid} onKeyDown={(e) => handleKD(e, commitBid)} onFocus={(e) => e.target.select()}
+            className="w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-green-500/50 focus:ring-green-500/30 hover:bg-muted/50 transition-colors"
+            aria-label="Manual bid value" />
+        ) : (
+          <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-bid bg-muted/30 rounded border border-border">
+            {bidVal != null && bidVal !== 0 ? formatNumber(bidVal) : '-'}
+          </span>
+        )}
+        {isBidManual && <span className="text-[9px] font-medium text-muted-foreground uppercase">M</span>}
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild><Clock className="h-3 w-3 text-gray-500 shrink-0" aria-label="Bid timestamp" /></TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">{formatTimestamp(bidFeed?.bidTimestamp)}</TooltipContent>
+        </Tooltip>
+      </div>
+      {/* ASK */}
+      <div className="flex items-center gap-1.5">
+        <label className="text-[10px] font-medium text-red-400 uppercase tracking-wider shrink-0">ASK</label>
+        <PriceSourceCombobox value={effectiveAskSource} quoteFeeds={stream.quoteFeeds ?? []} onValueChange={handleAskSourceChange} className={cn(isAskSourceStaged && 'text-blue-400 bg-blue-500/10')} />
+        {isAskManual ? (
+          <input type="text" inputMode="decimal" value={askInput}
+            onChange={(e) => setAskInput(e.target.value.replace(/[^0-9.-]/g, ''))}
+            onBlur={commitAsk} onKeyDown={(e) => handleKD(e, commitAsk)} onFocus={(e) => e.target.select()}
+            className="w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-red-500/50 focus:ring-red-500/30 hover:bg-muted/50 transition-colors"
+            aria-label="Manual ask value" />
+        ) : (
+          <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-ask bg-muted/30 rounded border border-border">
+            {askVal != null && askVal !== 0 ? formatNumber(askVal) : '-'}
+          </span>
+        )}
+        {isAskManual && <span className="text-[9px] font-medium text-muted-foreground uppercase">M</span>}
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild><Clock className="h-3 w-3 text-gray-500 shrink-0" aria-label="Ask timestamp" /></TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">{formatTimestamp(askFeed?.askTimestamp)}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -667,6 +804,7 @@ interface ExpandedLevelsTableProps {
   launchingStreamIds: Set<string>;
   launchingLevelKeys: Set<string>;
   hideIndividualLevelControls: boolean;
+  independentPriceSources: boolean;
 }
 
 function ExpandedLevelsTable({
@@ -688,6 +826,7 @@ function ExpandedLevelsTable({
   launchingStreamIds,
   launchingLevelKeys,
   hideIndividualLevelControls,
+  independentPriceSources,
 }: ExpandedLevelsTableProps) {
   const { defaultSpreads } = useDefaultSpreads();
 
@@ -838,21 +977,31 @@ function ExpandedLevelsTable({
         aria-label="Price and volume settings"
       >
         <div className="flex items-center gap-2 flex-wrap min-w-0">
-          {stream.selectedPriceSource === 'manual' && (
-            <ManualBidAskInputs
+          {independentPriceSources ? (
+            <IndependentPriceSourcesPanel
               stream={stream}
               updateStreamSet={updateStreamSet}
               formatNumber={formatNumber}
             />
-          )}
-          {stream.selectedPriceSource && stream.selectedPriceSource !== 'manual' && (
-            <LiveBidAskDisplay
-              bidValue={bidValue}
-              askValue={askValue}
-              bidTimestamp={bidTimestamp}
-              askTimestamp={askTimestamp}
-              formatNumber={formatNumber}
-            />
+          ) : (
+            <>
+              {stream.selectedPriceSource === 'manual' && (
+                <ManualBidAskInputs
+                  stream={stream}
+                  updateStreamSet={updateStreamSet}
+                  formatNumber={formatNumber}
+                />
+              )}
+              {stream.selectedPriceSource && stream.selectedPriceSource !== 'manual' && (
+                <LiveBidAskDisplay
+                  bidValue={bidValue}
+                  askValue={askValue}
+                  bidTimestamp={bidTimestamp}
+                  askTimestamp={askTimestamp}
+                  formatNumber={formatNumber}
+                />
+              )}
+            </>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-auto flex-wrap justify-end">
@@ -1538,14 +1687,46 @@ export function StreamRow({ stream }: StreamRowProps) {
     ? stream.referencePrice.manualAsk
     : stream.referencePrice.value);
 
-  const bidYield = bidValue + (bidBestLevel?.deltaBps || 0) / 100;
-  const askYield = askValue + (askBestLevel?.deltaBps || 0) / 100;
+  // When independentPriceSources is ON, override bid/ask values with per-side sources
+  const independentPriceSources = preferences.independentPriceSources;
+  const effBidSrc = stream.bidSelectedPriceSource ?? stream.selectedPriceSource;
+  const effAskSrc = stream.askSelectedPriceSource ?? stream.selectedPriceSource;
+  let effectiveBidValue = bidValue;
+  let effectiveAskValue = askValue;
+  let effectiveBidTimestamp = selectedFeed?.bidTimestamp;
+  let effectiveAskTimestamp = selectedFeed?.askTimestamp;
+  if (independentPriceSources) {
+    const bidIndepFeed = stream.quoteFeeds?.find(f => f.feedId === effBidSrc);
+    const askIndepFeed = stream.quoteFeeds?.find(f => f.feedId === effAskSrc);
+    const isBidIndepManual = effBidSrc === 'manual' || !effBidSrc;
+    const isAskIndepManual = effAskSrc === 'manual' || !effAskSrc;
+    effectiveBidValue = bidIndepFeed?.bid ?? (isBidIndepManual && stream.bidReferencePrice?.manualBid != null ? stream.bidReferencePrice.manualBid : bidValue);
+    effectiveAskValue = askIndepFeed?.ask ?? (isAskIndepManual && stream.askReferencePrice?.manualAsk != null ? stream.askReferencePrice.manualAsk : askValue);
+    effectiveBidTimestamp = bidIndepFeed?.bidTimestamp;
+    effectiveAskTimestamp = askIndepFeed?.askTimestamp;
+  }
+
+  // Display value for the main price source combobox:
+  // When independentPriceSources is ON, show the source only if both sides agree; otherwise undefined (triggers mixed display)
+  const priceSourceDisplayValue = independentPriceSources
+    ? (effBidSrc === effAskSrc ? effBidSrc : undefined)
+    : (stream.state === 'unconfigured' ? undefined : (stream.selectedPriceSource || 'manual'));
+
+  // Mixed state for color-coded bid/ask label display when sides differ
+  const mixedSourceState: MixedSourceState | undefined =
+    independentPriceSources && effBidSrc !== effAskSrc ? {
+      bidLabel: effBidSrc === 'manual' ? 'M' : (stream.quoteFeeds?.find(f => f.feedId === effBidSrc)?.feedName ?? effBidSrc),
+      askLabel: effAskSrc === 'manual' ? 'M' : (stream.quoteFeeds?.find(f => f.feedId === effAskSrc)?.feedName ?? effAskSrc),
+    } : undefined;
+
+  const bidYield = effectiveBidValue + (bidBestLevel?.deltaBps || 0) / 100;
+  const askYield = effectiveAskValue + (askBestLevel?.deltaBps || 0) / 100;
 
   // Yield crossing check for ValidationBanner descriptive message
   const bidLevel1 = stream.bid.spreadMatrix[0];
   const askLevel1 = stream.ask.spreadMatrix[0];
-  const bidYield1 = bidLevel1 ? bidValue + bidLevel1.deltaBps / 100 : null;
-  const askYield1 = askLevel1 ? askValue + askLevel1.deltaBps / 100 : null;
+  const bidYield1 = bidLevel1 ? effectiveBidValue + bidLevel1.deltaBps / 100 : null;
+  const askYield1 = askLevel1 ? effectiveAskValue + askLevel1.deltaBps / 100 : null;
   const hasYieldCrossing = bidYield1 !== null && askYield1 !== null && askYield1 > bidYield1;
 
   /** Global status indicator: Active (green) if any level active; Paused (gray) when none.
@@ -1613,10 +1794,16 @@ export function StreamRow({ stream }: StreamRowProps) {
         }
       : {};
 
+    // Per-side sync: when independentPriceSources is ON, also assign both sides
+    const perSideUpdate = independentPriceSources
+      ? { bidSelectedPriceSource: value, askSelectedPriceSource: value }
+      : {};
+
     // When selecting a quote feed, auto-populate bid/ask values
     if (!isManual && feed) {
       updateStreamSet(stream.id, {
         ...stateUpdate,
+        ...perSideUpdate,
         selectedPriceSource: value,
         quoteFeedId: feed.feedId,
         quoteFeedName: feed.feedName,
@@ -1645,8 +1832,26 @@ export function StreamRow({ stream }: StreamRowProps) {
         currentAsk = snapshotAsk ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
       }
 
+      // When independentPriceSources is ON, also seed per-side manual reference prices
+      const perSideManualUpdate = independentPriceSources ? {
+        bidReferencePrice: {
+          ...(stream.bidReferencePrice ?? stream.referencePrice),
+          source: 'manual' as const,
+          manualBid: currentBid,
+          manualAsk: currentAsk,
+        },
+        askReferencePrice: {
+          ...(stream.askReferencePrice ?? stream.referencePrice),
+          source: 'manual' as const,
+          manualBid: currentBid,
+          manualAsk: currentAsk,
+        },
+      } : {};
+
       updateStreamSet(stream.id, {
         ...stateUpdate,
+        ...perSideUpdate,
+        ...perSideManualUpdate,
         selectedPriceSource: 'manual',
         quoteFeedId: undefined,
         quoteFeedName: undefined,
@@ -1741,10 +1946,11 @@ export function StreamRow({ stream }: StreamRowProps) {
           {vis.priceSource && (
             <div onClick={(e) => e.stopPropagation()}>
               <PriceSourceCombobox
-                value={stream.state === 'unconfigured' ? undefined : (stream.selectedPriceSource || 'manual')}
+                value={priceSourceDisplayValue}
                 quoteFeeds={stream.quoteFeeds ?? []}
                 onValueChange={handlePriceSourceChange}
                 placeholder={stream.state === 'unconfigured' ? '-' : 'Select...'}
+                mixedState={mixedSourceState}
                 className={cn(isPriceSourceStaged && 'text-blue-400 bg-blue-500/10')}
               />
             </div>
@@ -1795,12 +2001,12 @@ export function StreamRow({ stream }: StreamRowProps) {
             <span className={cn(
               'text-right tabular-nums text-xs px-1 py-0.5 rounded',
               stream.state === 'unconfigured' ? 'text-muted-foreground' :
-              (bidValue != null && bidValue !== 0 && bidBestLevel
+              (effectiveBidValue != null && effectiveBidValue !== 0 && bidBestLevel
                 ? (isBidSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-green-400')
                 : 'text-muted-foreground')
             )}>
               {stream.state === 'unconfigured' ? '-' :
-                (bidValue != null && bidValue !== 0 && bidBestLevel ? formatNumber(bidYield) : '-')}
+                (effectiveBidValue != null && effectiveBidValue !== 0 && bidBestLevel ? formatNumber(bidYield) : '-')}
             </span>
           )}
 
@@ -1809,10 +2015,10 @@ export function StreamRow({ stream }: StreamRowProps) {
             <span className={cn(
               'text-center px-1 py-0.5 rounded tabular-nums text-xs',
               stream.state === 'unconfigured' ? 'text-muted-foreground' :
-              (bidValue != null && bidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
+              (effectiveBidValue != null && effectiveBidValue !== 0 ? 'text-live-bid' : 'text-muted-foreground')
             )}>
               {stream.state === 'unconfigured' ? '-' :
-                (bidValue != null && bidValue !== 0 ? formatNumber(bidValue) : '-')}
+                (effectiveBidValue != null && effectiveBidValue !== 0 ? formatNumber(effectiveBidValue) : '-')}
             </span>
           )}
 
@@ -1821,10 +2027,10 @@ export function StreamRow({ stream }: StreamRowProps) {
             <span className={cn(
               'text-center px-1 py-0.5 rounded tabular-nums text-xs',
               stream.state === 'unconfigured' ? 'text-muted-foreground' :
-              (askValue != null && askValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
+              (effectiveAskValue != null && effectiveAskValue !== 0 ? 'text-live-ask' : 'text-muted-foreground')
             )}>
               {stream.state === 'unconfigured' ? '-' :
-                (askValue != null && askValue !== 0 ? formatNumber(askValue) : '-')}
+                (effectiveAskValue != null && effectiveAskValue !== 0 ? formatNumber(effectiveAskValue) : '-')}
             </span>
           )}
 
@@ -1833,12 +2039,12 @@ export function StreamRow({ stream }: StreamRowProps) {
             <span className={cn(
               'text-right tabular-nums text-xs px-1 py-0.5 rounded',
               stream.state === 'unconfigured' ? 'text-muted-foreground' :
-              (askValue != null && askValue !== 0 && askBestLevel
+              (effectiveAskValue != null && effectiveAskValue !== 0 && askBestLevel
                 ? (isAskSpreadStaged ? 'text-blue-400 bg-blue-500/10' : 'text-red-400')
                 : 'text-muted-foreground')
             )}>
               {stream.state === 'unconfigured' ? '-' :
-                (askValue != null && askValue !== 0 && askBestLevel ? formatNumber(askYield) : '-')}
+                (effectiveAskValue != null && effectiveAskValue !== 0 && askBestLevel ? formatNumber(askYield) : '-')}
             </span>
           )}
 
@@ -2026,10 +2232,10 @@ export function StreamRow({ stream }: StreamRowProps) {
       {isExpanded && (
         <ExpandedLevelsTable
           stream={stream}
-          bidValue={bidValue}
-          askValue={askValue}
-          bidTimestamp={selectedFeed?.bidTimestamp}
-          askTimestamp={selectedFeed?.askTimestamp}
+          bidValue={effectiveBidValue}
+          askValue={effectiveAskValue}
+          bidTimestamp={effectiveBidTimestamp}
+          askTimestamp={effectiveAskTimestamp}
           updateStreamSet={updateStreamSet}
           formatNumber={formatNumber}
           launchStream={launchStream}
@@ -2043,6 +2249,7 @@ export function StreamRow({ stream }: StreamRowProps) {
           launchingStreamIds={launchingStreamIds}
           launchingLevelKeys={launchingLevelKeys}
           hideIndividualLevelControls={preferences.hideIndividualLevelControls}
+          independentPriceSources={independentPriceSources}
         />
       )}
       </div>

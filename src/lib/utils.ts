@@ -109,6 +109,14 @@ export function stagingConfigEquals(stream: StreamSet, snapshot: StagingSnapshot
   if (isManual && stream.referencePrice.value !== snapshot.referencePrice.value) return false;
   if ((stream.referencePrice.manualBid ?? 0) !== (snapshot.referencePrice.manualBid ?? 0)) return false;
   if ((stream.referencePrice.manualAsk ?? 0) !== (snapshot.referencePrice.manualAsk ?? 0)) return false;
+  // Per-side source comparison (normalise: undefined falls back to selectedPriceSource)
+  const streamBidSrc = stream.bidSelectedPriceSource ?? stream.selectedPriceSource;
+  const streamAskSrc = stream.askSelectedPriceSource ?? stream.selectedPriceSource;
+  const snapBidSrc = snapshot.bidSelectedPriceSource ?? snapshot.selectedPriceSource;
+  const snapAskSrc = snapshot.askSelectedPriceSource ?? snapshot.selectedPriceSource;
+  if (streamBidSrc !== snapBidSrc || streamAskSrc !== snapAskSrc) return false;
+  if (streamBidSrc === 'manual' && (stream.bidReferencePrice?.manualBid ?? 0) !== (snapshot.bidReferencePrice?.manualBid ?? 0)) return false;
+  if (streamAskSrc === 'manual' && (stream.askReferencePrice?.manualAsk ?? 0) !== (snapshot.askReferencePrice?.manualAsk ?? 0)) return false;
   if ((stream.bid.maxLvls ?? 1) !== (snapshot.bid.maxLvls ?? 1)) return false;
   if ((stream.ask.maxLvls ?? 1) !== (snapshot.ask.maxLvls ?? 1)) return false;
   const bidA = stream.bid.spreadMatrix;

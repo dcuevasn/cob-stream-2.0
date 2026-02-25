@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Activity, Check, ChevronDown, Pencil, Search } from 'lucide-react';
+import { Activity, ArrowLeftRight, Check, ChevronDown, Pencil, Search } from 'lucide-react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import type { StreamQuoteFeed } from '../../types/streamSet';
 import { cn } from '../../lib/utils';
@@ -10,6 +10,11 @@ interface PriceSourceOption {
   group: 'manual' | 'feeds';
 }
 
+export interface MixedSourceState {
+  bidLabel: string;
+  askLabel: string;
+}
+
 interface PriceSourceComboboxProps {
   value: string | undefined;
   quoteFeeds: StreamQuoteFeed[];
@@ -17,6 +22,7 @@ interface PriceSourceComboboxProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  mixedState?: MixedSourceState;
 }
 
 function getIcon(group: 'manual' | 'feeds') {
@@ -32,6 +38,7 @@ export function PriceSourceCombobox({
   placeholder = 'Select...',
   disabled = false,
   className,
+  mixedState,
 }: PriceSourceComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -123,6 +130,15 @@ export function PriceSourceCombobox({
             <>
               {getIcon(selected.group)}
               <span className="truncate flex-1 text-left">{selected.label}</span>
+            </>
+          ) : mixedState ? (
+            <>
+              <ArrowLeftRight className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="truncate flex-1 text-left">
+                <span className="text-live-bid">{mixedState.bidLabel}</span>
+                <span className="text-muted-foreground mx-px">/</span>
+                <span className="text-live-ask">{mixedState.askLabel}</span>
+              </span>
             </>
           ) : (
             <span className="truncate flex-1 text-left text-muted-foreground">{placeholder}</span>

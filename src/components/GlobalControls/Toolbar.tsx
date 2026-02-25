@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, FlaskConical, EyeOff } from 'lucide-react';
+import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, Columns, FlaskConical, EyeOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { AddSecurityDialog } from './AddSecurityDialog';
 import {
@@ -188,6 +188,13 @@ export function Toolbar() {
           >
             <EyeOff className="h-4 w-4 mr-2 text-muted-foreground" />
             Hide individual level controls
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={preferences.independentPriceSources}
+            onCheckedChange={(checked) => setPreferences({ independentPriceSources: checked })}
+          >
+            <Columns className="h-4 w-4 mr-2 text-muted-foreground" />
+            Independent price sources per side
           </DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>

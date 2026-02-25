@@ -129,6 +129,10 @@ function createStagingSnapshot(stream: StreamSet): StagingSnapshot {
     selectedPriceSource: stream.selectedPriceSource || 'manual',
     priceMode: stream.priceMode,
     referencePrice: { ...stream.referencePrice },
+    bidSelectedPriceSource: stream.bidSelectedPriceSource,
+    askSelectedPriceSource: stream.askSelectedPriceSource,
+    bidReferencePrice: stream.bidReferencePrice ? { ...stream.bidReferencePrice } : undefined,
+    askReferencePrice: stream.askReferencePrice ? { ...stream.askReferencePrice } : undefined,
   };
 }
 
@@ -155,6 +159,10 @@ function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnap
         maxLvls: stream.bid.maxLvls ?? 1,
       },
       ask: existingSnapshot.ask,
+      bidSelectedPriceSource: stream.bidSelectedPriceSource,
+      bidReferencePrice: stream.bidReferencePrice ? { ...stream.bidReferencePrice } : undefined,
+      askSelectedPriceSource: existingSnapshot.askSelectedPriceSource,
+      askReferencePrice: existingSnapshot.askReferencePrice ? { ...existingSnapshot.askReferencePrice } : undefined,
     };
   } else {
     return {
@@ -166,6 +174,10 @@ function createSideSnapshot(stream: StreamSet, side: 'bid' | 'ask'): StagingSnap
         spreadMatrix: stream.ask.spreadMatrix.map(({ levelNumber, deltaBps, quantity }) => ({ levelNumber, deltaBps, quantity })),
         maxLvls: stream.ask.maxLvls ?? 1,
       },
+      bidSelectedPriceSource: existingSnapshot.bidSelectedPriceSource,
+      bidReferencePrice: existingSnapshot.bidReferencePrice ? { ...existingSnapshot.bidReferencePrice } : undefined,
+      askSelectedPriceSource: stream.askSelectedPriceSource,
+      askReferencePrice: stream.askReferencePrice ? { ...stream.askReferencePrice } : undefined,
     };
   }
 }
@@ -255,6 +267,7 @@ const defaultPreferences: UserPreferences = {
   defaultLevels: 5,
   toastNotificationsEnabled: true,
   hideIndividualLevelControls: false,
+  independentPriceSources: false,
 };
 
 export const useStreamStore = create<StreamStore>()(
@@ -281,7 +294,8 @@ export const useStreamStore = create<StreamStore>()(
         const skipStaging = options?.skipStaging === true;
         const touchesStaging =
           !skipStaging &&
-          ('bid' in updates || 'ask' in updates || 'selectedPriceSource' in updates || 'priceMode' in updates || 'referencePrice' in updates) &&
+          ('bid' in updates || 'ask' in updates || 'selectedPriceSource' in updates || 'priceMode' in updates || 'referencePrice' in updates ||
+           'bidSelectedPriceSource' in updates || 'askSelectedPriceSource' in updates || 'bidReferencePrice' in updates || 'askReferencePrice' in updates) &&
           !('hasStagingChanges' in updates && updates.hasStagingChanges === false);
         set((state) => {
           const next = state.streamSets.map((ss) =>
@@ -1342,6 +1356,10 @@ export const useStreamStore = create<StreamStore>()(
           referencePrice: { ...snap.referencePrice },
           quoteFeedId: feed?.feedId,
           quoteFeedName: feed?.feedName,
+          bidSelectedPriceSource: snap.bidSelectedPriceSource,
+          askSelectedPriceSource: snap.askSelectedPriceSource,
+          bidReferencePrice: snap.bidReferencePrice ? { ...snap.bidReferencePrice } : undefined,
+          askReferencePrice: snap.askReferencePrice ? { ...snap.askReferencePrice } : undefined,
           hasStagingChanges: false,
           haltReason: undefined,
           haltDetails: undefined,
@@ -1417,6 +1435,10 @@ export const useStreamStore = create<StreamStore>()(
               referencePrice: { ...snap.referencePrice },
               quoteFeedId: feed?.feedId,
               quoteFeedName: feed?.feedName,
+              bidSelectedPriceSource: snap.bidSelectedPriceSource,
+              askSelectedPriceSource: snap.askSelectedPriceSource,
+              bidReferencePrice: snap.bidReferencePrice ? { ...snap.bidReferencePrice } : undefined,
+              askReferencePrice: snap.askReferencePrice ? { ...snap.askReferencePrice } : undefined,
               hasStagingChanges: false,
             };
           });

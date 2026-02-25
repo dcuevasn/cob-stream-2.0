@@ -40,6 +40,11 @@ export interface StagingSnapshot {
   selectedPriceSource: string;
   priceMode: PriceMode;
   referencePrice: ReferencePrice;
+  /** Per-side sources — captured when independentPriceSources is active */
+  bidSelectedPriceSource?: string;
+  askSelectedPriceSource?: string;
+  bidReferencePrice?: ReferencePrice;
+  askReferencePrice?: ReferencePrice;
 }
 
 export interface StreamSet {
@@ -74,6 +79,12 @@ export interface StreamSet {
   hasStagingChanges?: boolean;
   /** Baseline for revert detection; set on successful launch */
   lastLaunchedSnapshot?: StagingSnapshot;
+
+  /** Per-side price sources — only active when the independentPriceSources feature flag is on */
+  bidSelectedPriceSource?: string;
+  askSelectedPriceSource?: string;
+  bidReferencePrice?: ReferencePrice;
+  askReferencePrice?: ReferencePrice;
 }
 
 export interface QuoteFeed {
@@ -103,6 +114,7 @@ export interface UserPreferences {
   defaultLevels: number;
   toastNotificationsEnabled: boolean;
   hideIndividualLevelControls: boolean;
+  independentPriceSources: boolean;
 }
 
 export interface ValidationResult {
