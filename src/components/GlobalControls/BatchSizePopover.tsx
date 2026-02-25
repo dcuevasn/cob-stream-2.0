@@ -170,7 +170,7 @@ export function BatchSizePopover() {
 
           {affectedCount > 0 && (
             <p className="text-[10px] text-muted-foreground">
-              Apply to {affectedCount} stream{affectedCount !== 1 ? 's' : ''}
+              Apply to {affectedCount} stream{affectedCount !== 1 ? 's' : ''} (current view)
             </p>
           )}
 

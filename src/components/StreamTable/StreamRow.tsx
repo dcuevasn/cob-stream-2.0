@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Info, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel, getBestConfiguredLevel } from '../../lib/utils';
 
@@ -34,7 +34,7 @@ function YieldCrossingAlert({ bidYield1, askYield1 }: { bidYield1: number; askYi
   return (
     <div
       role="alert"
-      className="flex items-center gap-2 mb-2 py-2.5 pl-[8px] pr-[8px] rounded-md bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[34px]"
+      className="flex items-center gap-2 mb-2 py-2.5 pl-[8px] pr-[8px] bg-yellow-500/10 text-yellow-500 dark:text-yellow-400 text-[11px] min-h-[34px]"
       style={{ paddingLeft: '8px', paddingRight: '8px' }}
     >
       <Tooltip>
@@ -782,8 +782,7 @@ function ExpandedLevelsTable({
       {stream.hasStagingChanges && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-2 mb-2 py-1.5 pl-[8px] pr-[8px] rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] min-h-[28px] h-[30px]"
-          style={{ paddingLeft: '8px', paddingRight: '8px' }}
+          className="flex items-center justify-between gap-2 mb-2 py-1.5 px-[8px] -mx-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] min-h-[28px] h-[30px]"
         >
           <span className="truncate shrink-0">Applies staged changes. Relaunches active streams only.</span>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -815,6 +814,16 @@ function ExpandedLevelsTable({
               )}
             </Button>
           </div>
+        </div>
+      )}
+      {/* Unit type change warning banner */}
+      {stream.hasStagingChanges && stream.lastLaunchedSnapshot && stream.priceMode !== stream.lastLaunchedSnapshot.priceMode && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 mb-2 py-2.5 px-[8px] -mx-3 bg-muted/60 text-muted-foreground text-[11px]"
+        >
+          <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="truncate">Unit type changed. Review quantities accordingly.</span>
         </div>
       )}
       {/* Yield Crossing Alert - only show when NOT already displayed via ValidationBanner (halted with yield_crossing reason) */}
@@ -1978,7 +1987,7 @@ export function StreamRow({ stream }: StreamRowProps) {
 
       {/* Missing Price Source Alert Banner */}
       {hasMissingPriceSourceError && (
-        <div className="px-4 pb-2">
+        <div className="pb-2">
           <ValidationBanner
             message="Cannot launch: Please select a Price Source (QF or Manual) before launching this stream."
             pulsing={alertPulse}
@@ -1988,7 +1997,7 @@ export function StreamRow({ stream }: StreamRowProps) {
 
       {/* Manual price missing banner - shown when user tries to launch a side without manual price set */}
       {manualPriceErrorSide && (
-        <div className="px-4 pb-2">
+        <div className="pb-2">
           <ValidationBanner
             message={`Cannot launch ${manualPriceErrorSide.toUpperCase()}: Enter a manual ${manualPriceErrorSide} price to launch this side.`}
             pulsing={alertPulse}
@@ -1998,7 +2007,7 @@ export function StreamRow({ stream }: StreamRowProps) {
 
       {/* Validation Banner for halted streams */}
       {stream.state === 'halted' && stream.haltDetails && (
-        <div className="px-4 pb-2">
+        <div className="pb-2">
           <ValidationBanner
             message={
               stream.haltReason === 'yield_crossing' && hasYieldCrossing

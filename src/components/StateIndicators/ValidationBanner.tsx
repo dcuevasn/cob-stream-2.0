@@ -72,7 +72,7 @@ export function ValidationBanner({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-[8px] py-2.5 rounded-md text-[11px] text-[var(--status-halted)] transition-colors duration-200',
+        'flex items-center gap-2 px-[8px] py-2.5 text-[11px] text-[var(--status-halted)] transition-colors duration-200',
         pulsing ? 'bg-[var(--status-halted)]/30 ring-1 ring-[var(--status-halted)]/60' : 'bg-[var(--status-halted)]/15',
         className
       )}
