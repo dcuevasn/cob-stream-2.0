@@ -1,19 +1,16 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { ChevronDown, Minus, Plus, RotateCcw } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PriceSourceBatchPopover } from './PriceSourceBatchPopover';
-import { UnitBatchPopover } from './UnitBatchPopover';
 import { SpreadStepSettings } from './SpreadStepSettings';
+import { UnitBatchPopover } from './UnitBatchPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useSettingsStore, type ColumnVisibility, type ToggleableColumn } from '../../hooks/useSettingsStore';
-import { Button } from '../ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
-import type { SecurityType, StreamSet } from '../../types/streamSet';
+import { Button } from '../dsc/button';
+import { StepperInput } from '../dsc/stepper-input';
+import { Popover, PopoverTrigger, PopoverContent } from '../dsc/popover';
+import type { SecurityType } from '../../types/streamSet';
 
 /** Static fallback grid (all columns visible) */
 export const STREAM_TABLE_COL_GRID =
@@ -81,24 +78,20 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
   const [open, setOpen] = useState(false);
   const [adjustmentValue, setAdjustmentValue] = useState(0);
   const [inputStr, setInputStr] = useState('0');
-  const [affectedCount, setAffectedCount] = useState(0);
   const { stepSize } = useSpreadStepSize();
 
   const {
     adjustSpreadForType,
     resetSpreadsForType,
-    getStreamsForBatchSpread,
   } = useStreamStore();
 
-  // Update affected count when popover opens
+  // Reset adjustment when popover opens
   useEffect(() => {
     if (open) {
-      const streams = getStreamsForBatchSpread(securityType);
-      setAffectedCount(streams.length);
       setAdjustmentValue(0);
       setInputStr('0');
     }
-  }, [open, securityType, getStreamsForBatchSpread]);
+  }, [open]);
 
   const applyAdjustment = useCallback(
     (adj: number) => {
@@ -115,13 +108,9 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    // Allow: empty, minus sign alone, decimal point sequences, and valid numbers up to 3 decimals
     if (raw !== '' && raw !== '-' && raw !== '.' && raw !== '-.' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
     setInputStr(raw === '' ? '0' : raw);
-    // Don't apply adjustment for incomplete input (just minus or decimal point)
-    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
-      return;
-    }
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') return;
     const n = parseFloat(raw);
     if (!isNaN(n)) {
       const rounded = roundBps(n);
@@ -133,15 +122,8 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
     }
   };
 
-  const handlePlus = () => {
-    const newVal = roundBps(adjustmentValue + stepSize);
-    applyAdjustment(newVal);
-  };
-
-  const handleMinus = () => {
-    const newVal = roundBps(adjustmentValue - stepSize);
-    applyAdjustment(newVal);
-  };
+  const handlePlus = () => applyAdjustment(roundBps(adjustmentValue + stepSize));
+  const handleMinus = () => applyAdjustment(roundBps(adjustmentValue - stepSize));
 
   const handleBlur = () => {
     const n = parseFloat(inputStr);
@@ -154,14 +136,25 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
     resetSpreadsForType(side, securityType);
     setAdjustmentValue(0);
     setInputStr('0');
+    setOpen(false);
+  };
+
+  // Revert any adjustment made during this session and close
+  const handleCancel = () => {
+    if (Math.abs(adjustmentValue) > 0.0001) {
+      adjustSpreadForType(side, -adjustmentValue, securityType);
+    }
+    setAdjustmentValue(0);
+    setInputStr('0');
+    setOpen(false);
   };
 
   const label = side === 'bid' ? 'BSP' : 'ASP';
   const sideLabel = side === 'bid' ? 'Bid' : 'Ask';
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
           className={cn(
@@ -174,97 +167,75 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
           {label}
           <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
+      </PopoverTrigger>
+
+      <PopoverContent
         align="center"
         side="top"
-        sideOffset={4}
         collisionPadding={8}
-        avoidCollisions={true}
+        avoidCollisions
+        onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'min-w-[220px] w-[240px] max-w-[260px] p-3',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
-        )}
+        className="w-[165px] p-2 text-[10px] leading-tight shadow-sm"
       >
-        <div role="group" aria-label={`Adjust ${sideLabel} Spread (Batch)`} className="flex flex-col">
-          <h3 className="text-xs font-medium text-muted-foreground mb-1">
-            Adjust Spread (Batch - {sideLabel})
-          </h3>
-          <p className="text-[10px] text-muted-foreground/70 mb-2">
-            Adjusting {affectedCount} stream{affectedCount !== 1 ? 's' : ''}
+        <div
+          role="group"
+          aria-label={`Adjust ${sideLabel} Spread (Batch)`}
+          className="flex flex-col gap-1.5"
+        >
+          {/* ── Title ── */}
+          <p className="text-[10px] font-semibold text-[#fafafa] leading-none pb-0.5">
+            Adjust Spread (All Levels)
           </p>
-          
-          {/* Adjustment Controls */}
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMinus();
-              }}
-              className="h-8 w-8 shrink-0 p-0"
-              aria-label={`Decrease by ${stepSize} bps`}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={inputStr}
-                onChange={handleInputChange}
-                onFocus={(e) => (e.target as HTMLInputElement).select()}
-                onBlur={handleBlur}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                className={cn(
-                  'flex-1 min-w-0 h-8 px-2 py-1.5 text-[11px] tabular-nums text-center rounded border border-border bg-background',
-                  'focus:outline-none focus:ring-1 focus:ring-ring'
-                )}
-                aria-label="Adjustment in bps"
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">bps</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePlus();
-              }}
-              className="h-8 w-8 shrink-0 p-0"
-              aria-label={`Increase by ${stepSize} bps`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          
-          {/* Action Buttons - Reset and Settings */}
-          <div className="mt-2.5 flex items-center justify-end gap-2">
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleReset();
-              }}
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap gap-1"
-              aria-label="Reset all spreads to default spread values"
-            >
-              <RotateCcw className="h-2.5 w-2.5 shrink-0" />
-              Default spread
-            </Button>
+
+          {/* ── BPS · Stepper · Apply ── */}
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0 leading-none">BPS</span>
+
+            {/* DSC StepperInput xs */}
+            <StepperInput
+              value={inputStr}
+              onChange={handleInputChange}
+              onBlur={handleBlur}
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              onIncrement={() => handlePlus()}
+              onDecrement={() => handleMinus()}
+              incrementLabel={`Increase by ${stepSize} bps`}
+              decrementLabel={`Decrease by ${stepSize} bps`}
+            />
+
+            {/* Spread Control Settings — opens nested settings popover */}
             <SpreadStepSettings />
           </div>
+
+          {/* ── Divider ── */}
+          <div className="-mx-2 h-px bg-white/10" />
+
+          {/* ── Footer ── */}
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={(e) => { e.stopPropagation(); handleReset(); }}
+              className="whitespace-nowrap"
+              aria-label="Reset to default spread"
+            >
+              Default SPRD.
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+              aria-label="Cancel and revert adjustment"
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 }
 

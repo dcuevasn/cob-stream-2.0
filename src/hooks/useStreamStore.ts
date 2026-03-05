@@ -1508,7 +1508,7 @@ export const useStreamStore = create<StreamStore>()(
       adjustSpreadForType: (side, delta, securityType) => {
         const targetStreams = get().getStreamsForBatchSpread(securityType);
         const targetIds = new Set(targetStreams.map((s) => s.id));
-        
+
         set((state) => ({
           streamSets: state.streamSets.map((ss) => {
             if (!targetIds.has(ss.id)) return ss;
@@ -1527,6 +1527,13 @@ export const useStreamStore = create<StreamStore>()(
             };
           }),
         }));
+
+        // Re-evaluate staging for each affected stream — if the net delta brings
+        // values back to the last-launched snapshot, hasStagingChanges is cleared.
+        for (const id of targetIds) {
+          clearTimeout(revertDebounceTimers[id]);
+          revertDebounceTimers[id] = setTimeout(() => checkStagingRevert(id), REVERT_DEBOUNCE_MS);
+        }
       },
 
       resetSpreadsForType: (side, securityType) => {
@@ -1588,6 +1595,12 @@ export const useStreamStore = create<StreamStore>()(
             };
           }),
         }));
+
+        // Re-evaluate staging — default values may already match the snapshot.
+        for (const id of targetIds) {
+          clearTimeout(revertDebounceTimers[id]);
+          revertDebounceTimers[id] = setTimeout(() => checkStagingRevert(id), REVERT_DEBOUNCE_MS);
+        }
       },
 
       revertSpreadsForType: (side, securityType) => {
