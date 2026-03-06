@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Info, Loader2, Minus, Pause, Play, Plus, RotateCcw, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Clock, Hand, Info, Loader2, Pause, Play, Trash2, Zap } from 'lucide-react';
 import type { StreamSet, StreamSide, StreamState, Level, StagingSnapshot } from '../../types/streamSet';
 import { getActiveLevelCount, getBestActiveLevel, getBestConfiguredLevel } from '../../lib/utils';
 
@@ -7,12 +7,10 @@ import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
 import { Button } from '../ui/button';
-import { Checkbox } from '../ui/checkbox';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
+import { Button as DSCButton } from '../dsc/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../dsc/popover';
+import { StepperInput } from '../dsc/stepper-input';
+import { Checkbox } from '../dsc/checkbox';
 import { PriceSourceCombobox, type MixedSourceState } from './PriceSourceCombobox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
@@ -150,7 +148,7 @@ function ManualBidAskInputs({
           onKeyDown={(e) => handleKeyDown(e, commitBid)}
           onFocus={(e) => e.target.select()}
           className={cn(
-            'w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background',
+            'w-20 h-6 px-3 text-[11px] tabular-nums rounded border bg-background',
             'focus:outline-none focus:ring-1 focus:ring-offset-0',
             'hover:bg-muted/50 transition-colors',
             isBidStaged
@@ -173,7 +171,7 @@ function ManualBidAskInputs({
           onKeyDown={(e) => handleKeyDown(e, commitAsk)}
           onFocus={(e) => e.target.select()}
           className={cn(
-            'w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background',
+            'w-20 h-6 px-3 text-[11px] tabular-nums rounded border bg-background',
             'focus:outline-none focus:ring-1 focus:ring-offset-0',
             'hover:bg-muted/50 transition-colors',
             isAskStaged
@@ -357,10 +355,11 @@ function IndependentPriceSourcesPanel({
           <input type="text" inputMode="decimal" value={bidInput}
             onChange={(e) => setBidInput(e.target.value.replace(/[^0-9.-]/g, ''))}
             onBlur={commitBid} onKeyDown={(e) => handleKD(e, commitBid)} onFocus={(e) => e.target.select()}
-            className="w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-green-500/50 focus:ring-green-500/30 hover:bg-muted/50 transition-colors"
+            className="w-20 h-6 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-green-500/50 focus:ring-green-500/30 hover:bg-muted/50 transition-colors"
+            style={{ paddingLeft: '10px', paddingRight: '10px' }}
             aria-label="Manual bid value" />
         ) : (
-          <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-bid bg-muted/30 rounded border border-border">
+          <span className="w-20 h-6 flex items-center text-[11px] tabular-nums text-live-bid bg-muted/30 rounded border border-border" style={{ paddingLeft: '10px', paddingRight: '10px' }}>
             {bidVal != null && bidVal !== 0 ? formatNumber(bidVal) : '-'}
           </span>
         )}
@@ -378,10 +377,11 @@ function IndependentPriceSourcesPanel({
           <input type="text" inputMode="decimal" value={askInput}
             onChange={(e) => setAskInput(e.target.value.replace(/[^0-9.-]/g, ''))}
             onBlur={commitAsk} onKeyDown={(e) => handleKD(e, commitAsk)} onFocus={(e) => e.target.select()}
-            className="w-20 h-6 px-2 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-red-500/50 focus:ring-red-500/30 hover:bg-muted/50 transition-colors"
+            className="w-20 h-6 text-[11px] tabular-nums rounded border bg-background border-border focus:outline-none focus:ring-1 focus:ring-offset-0 focus:border-red-500/50 focus:ring-red-500/30 hover:bg-muted/50 transition-colors"
+            style={{ paddingLeft: '10px', paddingRight: '10px' }}
             aria-label="Manual ask value" />
         ) : (
-          <span className="w-20 h-6 px-2 flex items-center text-[11px] tabular-nums text-live-ask bg-muted/30 rounded border border-border">
+          <span className="w-20 h-6 flex items-center text-[11px] tabular-nums text-live-ask bg-muted/30 rounded border border-border" style={{ paddingLeft: '10px', paddingRight: '10px' }}>
             {askVal != null && askVal !== 0 ? formatNumber(askVal) : '-'}
           </span>
         )}
@@ -417,6 +417,7 @@ function BatchQtyHeader({
   const currentQty = matrix[0]?.quantity ?? 1000;
   const [inputValue, setInputValue] = useState(currentQty.toString());
   const [applyToBoth, setApplyToBoth] = useState(false);
+  const inputLabel = volumeLabel === 'QTY' ? 'QTY' : isUdiSecurity(stream.securityType) ? 'UDI' : 'MXN';
 
   useEffect(() => {
     if (open) {
@@ -441,9 +442,18 @@ function BatchQtyHeader({
 
   const handleCancel = () => setOpen(false);
 
+  const handleIncrement = () => {
+    const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10) || 0;
+    setInputValue(String(Math.min(MAX_QUANTITY, v + 1_000)));
+  };
+  const handleDecrement = () => {
+    const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10) || 0;
+    setInputValue(String(Math.max(MIN_QUANTITY, v - 1_000)));
+  };
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
@@ -457,80 +467,126 @@ function BatchQtyHeader({
           {volumeLabel}
           <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
+      </PopoverTrigger>
+      <PopoverContent
         align="start"
         sideOffset={4}
         collisionPadding={8}
+        onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'min-w-[240px] w-[240px] p-6',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
-        )}
+        style={{ padding: '8px' }}
+        className="w-[190px]"
       >
-        <div role="group" aria-label={`Set ${volumeLabel} (All Levels)`} className="flex flex-col">
+        <div role="group" aria-label={`Set ${volumeLabel} (All Levels)`} className="flex flex-col gap-[6px]">
+
           {/* Title */}
-          <h3 className="text-sm font-medium text-muted-foreground mb-4">
+          <p className="text-[10px] font-semibold text-[#fafafa] leading-[10px]">
             Set {volumeLabel} (All Levels)
-          </h3>
+          </p>
 
-          {/* Input section */}
-          <label className="flex flex-col gap-2 mb-4">
-            <span className="text-[11px] font-medium text-muted-foreground">{volumeLabel}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-              onFocus={(e) => (e.target as HTMLInputElement).select()}
-              placeholder={formatQuantityFull(currentQty)}
-              className={cn(
-                'w-full h-10 px-4 py-2.5 text-[11px] tabular-nums rounded border border-border bg-background',
-                'focus:outline-none focus:ring-1 focus:ring-ring',
-                !isValid && inputValue !== '' && 'border-red-500/50'
-              )}
-              aria-label={volumeLabel}
-            />
-            {!isValid && inputValue !== '' && (
-              <span className="text-[10px] text-red-500">
-                Must be {MIN_QUANTITY.toLocaleString()} – {MAX_QUANTITY.toLocaleString()}
-              </span>
-            )}
-          </label>
+          {/* QTY row */}
+          <div className="flex flex-col" style={{ paddingTop: '4px' }}>
+            <div className="flex items-center gap-[4px]" style={{ paddingBottom: '8px' }}>
+              <span className="text-[9px] font-medium text-[#a1a1a1] w-[28px] shrink-0">{inputLabel}</span>
+              <StepperInput
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => {
+                  const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10);
+                  if (!isNaN(v)) setInputValue(String(Math.min(MAX_QUANTITY, Math.max(MIN_QUANTITY, v))));
+                }}
+                onFocus={(e) => e.currentTarget.select()}
+                onIncrement={handleIncrement}
+                onDecrement={handleDecrement}
+                incrementLabel="Increase by 1,000"
+                decrementLabel="Decrease by 1,000"
+                inputClassName="w-[80px]"
+              />
+            </div>
 
-          {/* Opposite-side checkbox */}
-          <div
-            className="flex items-center gap-2 mb-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Checkbox
-              id={`apply-both-${side}`}
-              checked={applyToBoth}
-              onCheckedChange={(checked) => setApplyToBoth(checked === true)}
-            />
-            <label
-              htmlFor={`apply-both-${side}`}
-              className="text-[11px] text-muted-foreground cursor-pointer select-none"
+            {/* Checkbox */}
+            <div
+              className="flex items-center gap-[6px]"
+              onClick={(e) => e.stopPropagation()}
             >
-              Also apply to {oppositeSide.toUpperCase()} side
-            </label>
+              <Checkbox
+                id={`apply-both-${side}`}
+                checked={applyToBoth}
+                onCheckedChange={(checked) => setApplyToBoth(checked === true)}
+              />
+              <label
+                htmlFor={`apply-both-${side}`}
+                className="text-[11px] text-[#a1a1a1] cursor-pointer select-none leading-none"
+              >
+                Also apply to {oppositeSide.toUpperCase()} side
+              </label>
+            </div>
           </div>
 
-          {/* Button section */}
-          <div className="flex items-center gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={handleCancel} className="h-7 px-2.5 text-[11px]">
+          {/* Divider */}
+          <div className="h-px bg-[rgba(255,255,255,0.1)]" />
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-[4px]">
+            <DSCButton
+              size="xs"
+              variant="secondary"
+              onClick={handleCancel}
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
               Cancel
-            </Button>
-            <Button variant="default" size="sm" onClick={handleApply} disabled={!canApply} className="h-7 px-2.5 text-[11px]">
+            </DSCButton>
+            <DSCButton
+              size="xs"
+              variant="default"
+              onClick={handleApply}
+              disabled={!canApply}
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
               Apply
-            </Button>
+            </DSCButton>
           </div>
+
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Max levels stepper — wraps DSC StepperInput with local string state, min 0 max 5 */
+function MaxLvlsInput({
+  value,
+  onChange,
+  isStaged,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  isStaged?: boolean;
+}) {
+  const [inputVal, setInputVal] = useState(String(value));
+  // Keep in sync when external value changes
+  if (String(value) !== inputVal && document.activeElement?.tagName !== 'INPUT') {
+    setInputVal(String(value));
+  }
+  const commit = () => {
+    const v = Math.min(5, Math.max(0, parseInt(inputVal, 10) || 0));
+    setInputVal(String(v));
+    onChange(v);
+  };
+  return (
+    <StepperInput
+      value={inputVal}
+      onChange={(e) => setInputVal(e.target.value.replace(/[^0-9]/g, ''))}
+      onBlur={commit}
+      onFocus={(e) => e.target.select()}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
+      onIncrement={() => { const v = Math.min(5, (parseInt(inputVal, 10) || 0) + 1); setInputVal(String(v)); onChange(v); }}
+      onDecrement={() => { const v = Math.max(0, (parseInt(inputVal, 10) || 0) - 1); setInputVal(String(v)); onChange(v); }}
+      incrementLabel="Increase max levels"
+      decrementLabel="Decrease max levels"
+      inputClassName={isStaged ? 'w-[28px] text-blue-400' : 'w-[28px]'}
+    />
   );
 }
 
@@ -644,8 +700,8 @@ function BatchSpreadHeader({
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
@@ -654,96 +710,76 @@ function BatchSpreadHeader({
             'hover:text-foreground hover:bg-muted/50 rounded transition-colors',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
           )}
-          aria-label={`Adjust spread for all levels`}
+          aria-label="Adjust spread for all levels"
         >
           Spread
           <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
+      </PopoverTrigger>
+      <PopoverContent
         align="start"
         side="top"
-        sideOffset={4}
         collisionPadding={8}
-        avoidCollisions={false}
+        avoidCollisions
+        onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'min-w-[200px] w-[220px] max-w-[240px] p-3',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
-        )}
+        style={{ padding: '8px' }}
+        className="w-[165px] text-[10px] leading-tight shadow-sm"
       >
-        <div role="group" aria-label="Adjust Spread (All Levels)" className="flex flex-col">
-          <h3 className="text-xs font-medium text-muted-foreground mb-2">
+        <div role="group" aria-label="Adjust Spread (All Levels)" className="flex flex-col gap-1.5">
+          {/* Title */}
+          <p className="text-[10px] font-semibold text-[#fafafa] leading-none pb-0.5">
             Adjust Spread (All Levels)
-          </h3>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMinus();
-              }}
-              className="h-8 w-8 shrink-0 p-0"
-              aria-label={`Decrease by ${stepSize} bps`}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <input
-                type="text"
-                inputMode="decimal"
+          </p>
+
+          {/* BPS · Stepper · Settings */}
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0 leading-none">BPS</span>
+              <StepperInput
                 value={inputStr}
                 onChange={handleInputChange}
-                onFocus={(e) => (e.target as HTMLInputElement).select()}
                 onBlur={handleBlur}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                className={cn(
-                  'flex-1 min-w-0 h-8 px-2 py-1.5 text-[11px] tabular-nums text-center rounded border border-border bg-background',
-                  'focus:outline-none focus:ring-1 focus:ring-ring'
-                )}
-                aria-label="Adjustment in bps"
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                onIncrement={() => handlePlus()}
+                onDecrement={() => handleMinus()}
+                incrementLabel={`Increase by ${stepSize} bps`}
+                decrementLabel={`Decrease by ${stepSize} bps`}
               />
-              <span className="text-[10px] text-muted-foreground shrink-0">bps</span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePlus();
-              }}
-              className="h-8 w-8 shrink-0 p-0"
-              aria-label={`Increase by ${stepSize} bps`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          {/* Action Buttons - Reset and Settings */}
-          <div className="mt-2.5 flex items-center justify-end gap-2">
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleResetToDefault();
-              }}
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 whitespace-nowrap gap-1"
-              aria-label="Reset all level spreads to default spread values"
-            >
-              <RotateCcw className="h-2.5 w-2.5 shrink-0" />
-              Default spread
-            </Button>
             <SpreadStepSettings />
           </div>
+
+          {/* Divider */}
+          <div className="-mx-2 h-px bg-white/10" />
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-1">
+            <DSCButton
+              size="xs"
+              variant="secondary"
+              onClick={(e) => { e.stopPropagation(); handleResetToDefault(); }}
+              className="whitespace-nowrap"
+              aria-label="Reset to default spread"
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
+              Default SPRD.
+            </DSCButton>
+            <DSCButton
+              size="xs"
+              variant="secondary"
+              onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+              aria-label="Close"
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
+              Cancel
+            </DSCButton>
+          </div>
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1088,34 +1124,14 @@ function ExpandedLevelsTable({
                 Bid Levels ({bidActiveCount})
               </span>
               <div className="flex items-center gap-0.5">
-                <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                  <span>Max</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={5}
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[10px] text-muted-foreground">MAX</span>
+                  <MaxLvlsInput
                     value={stream.bid.maxLvls ?? 1}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const raw = e.target.value;
-                      const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-                      updateStreamSet(stream.id, {
-                        bid: { ...stream.bid, maxLvls: v },
-                      });
-                    }}
-                    onKeyDown={(e) => {
-                      if (/^[0-5]$/.test(e.key)) {
-                        e.target.select();
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:text-foreground',
-                      stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
-                    )}
+                    onChange={(v) => updateStreamSet(stream.id, { bid: { ...stream.bid, maxLvls: v } })}
+                    isStaged={!!(stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1))}
                   />
-                </label>
+                </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1249,34 +1265,14 @@ function ExpandedLevelsTable({
                   </TooltipTrigger>
                   <TooltipContent>Stop all ask levels</TooltipContent>
                 </Tooltip>
-                <label className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                  <span>Max</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={5}
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <MaxLvlsInput
                     value={stream.ask.maxLvls ?? 1}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const raw = e.target.value;
-                      const v = raw === '' ? 0 : Math.min(5, Math.max(0, parseInt(raw, 10) || 0));
-                      updateStreamSet(stream.id, {
-                        ask: { ...stream.ask, maxLvls: v },
-                      });
-                    }}
-                    onKeyDown={(e) => {
-                      if (/^[0-5]$/.test(e.key)) {
-                        e.target.select();
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      'w-12 h-6 px-1 text-center text-[10px] tabular-nums rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:text-foreground',
-                      stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1) && 'text-blue-400 bg-blue-500/10'
-                    )}
+                    onChange={(v) => updateStreamSet(stream.id, { ask: { ...stream.ask, maxLvls: v } })}
+                    isStaged={!!(stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1))}
                   />
-                </label>
+                  <span className="text-[10px] text-muted-foreground">MAX</span>
+                </div>
               </div>
               <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider whitespace-nowrap">
                 Ask Levels ({askActiveCount})

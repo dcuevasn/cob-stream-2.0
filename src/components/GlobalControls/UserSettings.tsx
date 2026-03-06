@@ -7,13 +7,13 @@ import {
 } from '../ui/sheet';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
+import { Button as DSCButton } from '../dsc/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import {
   useSettingsStore,
   COLUMN_DEFINITIONS,
   type ToggleableColumn,
 } from '../../hooks/useSettingsStore';
-import { cn } from '../../lib/utils';
 
 type SettingsView = 'preferences' | 'general' | 'columns';
 
@@ -38,11 +38,8 @@ export function UserSettings() {
     }
   };
 
-  const allVisible = Object.values(columnVisibility).every(Boolean);
-
   return (
     <>
-      {/* Settings trigger button */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -56,11 +53,11 @@ export function UserSettings() {
         <TooltipContent>User Settings</TooltipContent>
       </Tooltip>
 
-      {/* Settings Sheet */}
       <Sheet open={isSettingsOpen} onOpenChange={handleOpenChange}>
         <SheetContent
           side="right"
           className="w-[302px] sm:max-w-[302px] flex flex-col p-0"
+          style={{ backgroundColor: '#1a1a1a', borderColor: '#333' }}
         >
           {view === 'preferences' && (
             <PreferencesView
@@ -82,7 +79,6 @@ export function UserSettings() {
               toggleColumn={toggleColumn}
               resetColumnVisibility={resetColumnVisibility}
               showAllColumns={showAllColumns}
-              allVisible={allVisible}
             />
           )}
         </SheetContent>
@@ -100,44 +96,40 @@ interface PreferencesViewProps {
   onNavigateToColumns: () => void;
 }
 
-function PreferencesView({
-  onNavigateToGeneral,
-  onNavigateToColumns,
-}: PreferencesViewProps) {
+function PreferencesView({ onNavigateToGeneral, onNavigateToColumns }: PreferencesViewProps) {
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center gap-4 border-b border-[#333] pl-4 pr-2 py-3">
-        <SheetTitle>Preferences</SheetTitle>
+      <div
+        className="flex items-center gap-4"
+        style={{ borderBottom: '1px solid #333', paddingLeft: '16px', paddingRight: '8px', paddingTop: '10px', paddingBottom: '10px' }}
+      >
+        <SheetTitle style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', flex: 1, margin: 0 }}>
+          Preferences
+        </SheetTitle>
       </div>
 
-      {/* Navigation menu */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="border-b border-[#333] px-1 py-3">
-          {/* General */}
+        <div style={{ borderBottom: '1px solid #333', padding: '0 4px 4px' }}>
           <NavItem
-            icon={<Settings className="h-5 w-5 text-[#939393]" />}
+            icon={<Settings style={{ width: '16px', height: '16px', color: '#939393' }} />}
             label="General"
             onClick={onNavigateToGeneral}
           />
-
-          {/* Column visibility */}
           <NavItem
-            icon={<Columns3 className="h-5 w-5 text-[#939393]" />}
+            icon={<Columns3 style={{ width: '16px', height: '16px', color: '#939393' }} />}
             label="Column visibility"
             onClick={onNavigateToColumns}
           />
         </div>
       </div>
 
-      {/* Footer */}
       <SettingsFooter />
     </>
   );
 }
 
 /* ─────────────────────────────────────────────
-   View 2: General (Safety Relaunch Behavior)
+   View 2: General
    ───────────────────────────────────────────── */
 
 interface GeneralViewProps {
@@ -149,82 +141,42 @@ interface GeneralViewProps {
   setAutoRelaunch: (key: 'autoRelaunchFFCH' | 'autoRelaunchYieldCrossing', value: boolean) => void;
 }
 
-function GeneralView({
-  onBack,
-  autoRelaunchSettings,
-  setAutoRelaunch,
-}: GeneralViewProps) {
+function GeneralView({ onBack, autoRelaunchSettings, setAutoRelaunch }: GeneralViewProps) {
   return (
     <>
-      {/* Header with back button */}
       <SubViewHeader title="Stream Scanner Settings" onBack={onBack} />
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        {/* Safety Relaunch Behavior Section */}
-        <div className="border-b border-[#333] p-4">
+        <div style={{ borderBottom: '1px solid #333', padding: '16px' }}>
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-medium text-[#e4e5e9] leading-[1.4]">
+            <h3 style={{ fontSize: '12px', fontWeight: 500, color: '#e4e5e9', lineHeight: '1.4', marginBottom: '4px' }}>
               Safety Relaunch Behavior
             </h3>
 
-            {/* FFCH Auto-Relaunch */}
-            <div className="flex flex-col w-full">
-              <div className="flex items-center justify-between w-full">
-                <label
-                  htmlFor="ffch-switch"
-                  className="flex items-center py-2.5 cursor-pointer"
-                >
-                  <span className="text-xs font-medium text-[#939393] leading-[1.4] w-[192px]">
-                    Auto-relaunch when Fat-Finger Check (FFCH) clears
-                  </span>
-                </label>
-                <Switch
-                  id="ffch-switch"
-                  checked={autoRelaunchSettings.autoRelaunchFFCH}
-                  onCheckedChange={(checked) =>
-                    setAutoRelaunch('autoRelaunchFFCH', checked)
-                  }
-                />
-              </div>
-              <p className="text-xs font-medium text-[#5d5d5d] leading-[1.4]">
-                Controls whether streams automatically relaunch when price
-                returns within 100bps threshold.
-              </p>
-            </div>
+            <SettingRow
+              id="ffch-switch"
+              label="Auto-relaunch when Fat-Finger Check (FFCH) clears"
+              description="Controls whether streams automatically relaunch when price returns within 100bps threshold."
+              checked={autoRelaunchSettings.autoRelaunchFFCH}
+              onCheckedChange={(v) => setAutoRelaunch('autoRelaunchFFCH', v)}
+            />
 
-            {/* Yield Crossing Auto-Relaunch */}
-            <div className="flex flex-col w-full">
-              <div className="flex items-center justify-between w-full">
-                <label
-                  htmlFor="yield-crossing-switch"
-                  className="flex items-center py-2.5 cursor-pointer"
-                >
-                  <span className="text-xs font-medium text-[#939393] leading-[1.4] w-[192px]">
-                    Auto-relaunch when yield crossing resolves
-                  </span>
-                </label>
-                <Switch
-                  id="yield-crossing-switch"
-                  checked={autoRelaunchSettings.autoRelaunchYieldCrossing}
-                  onCheckedChange={(checked) =>
-                    setAutoRelaunch('autoRelaunchYieldCrossing', checked)
-                  }
-                />
-              </div>
-              <p className="text-xs font-medium text-[#5d5d5d] leading-[1.4]">
-                Controls whether streams automatically relaunch when bid/ask
-                yields are valid.
-              </p>
-            </div>
+            <SettingRow
+              id="yield-crossing-switch"
+              label="Auto-relaunch when yield crossing resolves"
+              description="Controls whether streams automatically relaunch when bid/ask yields are valid."
+              checked={autoRelaunchSettings.autoRelaunchYieldCrossing}
+              onCheckedChange={(v) => setAutoRelaunch('autoRelaunchYieldCrossing', v)}
+            />
 
-            {/* Info message bar */}
-            <div className="pt-4">
-              <div className="flex items-start gap-2 rounded-md border border-white/[0.07] bg-[#444] p-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-                <p className="text-xs font-normal text-white leading-[1.4]">
-                  User-initiated stops always require manual relaunch regardless
-                  of these settings.
+            <div style={{ paddingTop: '12px' }}>
+              <div
+                className="flex items-start gap-2"
+                style={{ borderRadius: '6px', border: '1px solid rgba(255,255,255,0.07)', backgroundColor: '#333', padding: '8px' }}
+              >
+                <AlertTriangle style={{ width: '14px', height: '14px', color: '#fbbf24', flexShrink: 0, marginTop: '1px' }} />
+                <p style={{ fontSize: '11px', fontWeight: 400, color: '#ffffff', lineHeight: '1.5' }}>
+                  User-initiated stops always require manual relaunch regardless of these settings.
                 </p>
               </div>
             </div>
@@ -232,7 +184,6 @@ function GeneralView({
         </div>
       </div>
 
-      {/* Footer */}
       <SettingsFooter />
     </>
   );
@@ -248,7 +199,6 @@ interface ColumnVisibilityViewProps {
   toggleColumn: (col: ToggleableColumn) => void;
   resetColumnVisibility: () => void;
   showAllColumns: () => void;
-  allVisible: boolean;
 }
 
 function ColumnVisibilityView({
@@ -257,31 +207,38 @@ function ColumnVisibilityView({
   toggleColumn,
   resetColumnVisibility,
   showAllColumns,
-  allVisible,
 }: ColumnVisibilityViewProps) {
+  const allVisible = Object.values(columnVisibility).every(Boolean);
+  const [showAllHovered, setShowAllHovered] = useState(false);
+
   return (
     <>
-      {/* Header with back button */}
       <SubViewHeader title="Column visibility" onBack={onBack} />
 
-      {/* Show all toolbar */}
-      <div className="flex items-center justify-end px-3 py-2">
+      {/* Show all row */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 12px', borderBottom: '1px solid #333' }}>
         <button
           type="button"
+          onMouseEnter={() => setShowAllHovered(true)}
+          onMouseLeave={() => setShowAllHovered(false)}
           onClick={allVisible ? resetColumnVisibility : showAllColumns}
-          className="text-xs font-medium text-[#7f66ff] hover:text-[#9580ff] transition-colors px-2 h-6"
+          style={{
+            fontSize: '12px',
+            fontWeight: 500,
+            color: showAllHovered ? '#5ba0ff' : '#939393',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '0',
+            transition: 'color 0.12s',
+          }}
         >
           Show all
         </button>
       </div>
 
-      {/* Column list */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin border-t border-[#333]">
-        <div className="flex flex-col p-3">
-          {/* Always-visible: Name */}
-          <ColumnRow label="Name" visible alwaysOn />
-
-          {/* Toggleable columns */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '8px' }}>
           {COLUMN_DEFINITIONS.map((col) => (
             <ColumnRow
               key={col.key}
@@ -293,7 +250,6 @@ function ColumnVisibilityView({
         </div>
       </div>
 
-      {/* Footer */}
       <SettingsFooter onReset={resetColumnVisibility} />
     </>
   );
@@ -303,77 +259,135 @@ function ColumnVisibilityView({
    Shared Components
    ───────────────────────────────────────────── */
 
-/** Sub-view header with back arrow and title */
 function SubViewHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <div className="flex items-center gap-3 border-b border-[#333] pl-4 pr-2 py-3">
+    <div
+      className="flex items-center gap-3"
+      style={{ borderBottom: '1px solid #333', paddingLeft: '16px', paddingRight: '8px', paddingTop: '10px', paddingBottom: '10px' }}
+    >
       <button
         type="button"
         onClick={onBack}
-        className="rounded-sm p-1.5 hover:bg-[#262626] transition-colors -ml-1.5"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         aria-label="Back to preferences"
+        style={{
+          borderRadius: '4px',
+          padding: '4px',
+          marginLeft: '-4px',
+          background: hovered ? '#262626' : 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.12s',
+          display: 'flex',
+          alignItems: 'center',
+        }}
       >
-        <ArrowLeft className="h-4 w-4 text-[#939393]" />
+        <ArrowLeft style={{ width: '14px', height: '14px', color: '#939393' }} />
       </button>
-      <SheetTitle>{title}</SheetTitle>
+      <SheetTitle style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff', margin: 0 }}>
+        {title}
+      </SheetTitle>
     </div>
   );
 }
 
-/** Navigation item in the preferences root menu */
-function NavItem({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
+function NavItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        'flex items-center justify-between w-full h-7 pl-3 pr-1 rounded',
-        'hover:bg-[#262626] transition-colors group'
-      )}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        height: '28px',
+        paddingLeft: '12px',
+        paddingRight: '4px',
+        borderRadius: '4px',
+        background: hovered ? '#262626' : 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background 0.12s',
+      }}
     >
-      <div className="flex items-center gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {icon}
-        <span className="text-[13px] font-medium text-[#c9c9c9] leading-[18px]">
+        <span style={{ fontSize: '13px', fontWeight: 500, color: '#c9c9c9', lineHeight: '18px', whiteSpace: 'nowrap' }}>
           {label}
         </span>
       </div>
-      <ChevronRight className="h-4 w-4 text-[#939393] opacity-0 group-hover:opacity-100 transition-opacity" />
+      <ChevronRight style={{ width: '14px', height: '14px', color: '#939393', flexShrink: 0 }} />
     </button>
   );
 }
 
-/** Footer bar matching Figma design */
-function SettingsFooter({ onReset }: { onReset?: () => void } = {}) {
+function SettingRow({
+  id,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
   return (
-    <div className="flex items-center justify-end gap-3 border-t border-[#333] overflow-clip px-4 py-3">
-      {onReset && (
-        <button
-          type="button"
-          onClick={onReset}
-          className="text-xs font-medium text-[#7f66ff] hover:text-[#9580ff] transition-colors px-2 h-6"
-        >
-          Reset to default
-        </button>
-      )}
-      <Button
-        size="sm"
-        className="h-6 px-2 text-xs font-medium bg-[#2680eb] hover:bg-[#2680eb]/90 text-white"
-      >
-        Apply
-      </Button>
+    <div className="flex flex-col w-full">
+      <div className="flex items-center justify-between w-full">
+        <label htmlFor={id} style={{ cursor: 'pointer', paddingTop: '8px', paddingBottom: '8px', flex: 1 }}>
+          <span style={{ fontSize: '12px', fontWeight: 500, color: '#939393', lineHeight: '1.4', display: 'block', maxWidth: '192px' }}>
+            {label}
+          </span>
+        </label>
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+        />
+      </div>
+      <p style={{ fontSize: '11px', fontWeight: 400, color: '#5d5d5d', lineHeight: '1.4' }}>
+        {description}
+      </p>
     </div>
   );
 }
 
-/** Column visibility row with eye icon toggle */
+function SettingsFooter({ onReset }: { onReset?: () => void } = {}) {
+  return (
+    <div
+      className="flex items-center justify-end gap-3"
+      style={{ borderTop: '1px solid #333', padding: '10px 16px' }}
+    >
+      {onReset && (
+        <DSCButton
+          variant="ghost"
+          size="sm"
+          onClick={onReset}
+          style={{ height: '24px', paddingLeft: '8px', paddingRight: '8px', fontSize: '12px' }}
+        >
+          Reset to default
+        </DSCButton>
+      )}
+      <DSCButton
+        variant="default"
+        size="sm"
+        style={{ height: '24px', paddingLeft: '8px', paddingRight: '8px', fontSize: '12px', backgroundColor: '#2680eb' }}
+      >
+        Apply
+      </DSCButton>
+    </div>
+  );
+}
+
 function ColumnRow({
   label,
   visible,
@@ -385,16 +399,14 @@ function ColumnRow({
   onToggle?: () => void;
   alwaysOn?: boolean;
 }) {
+  const [hovered, setHovered] = useState(false);
   const isToggleable = !alwaysOn && onToggle;
 
   return (
     <div
-      className={cn(
-        'flex items-center justify-between pl-1.5 h-8 rounded',
-        isToggleable && 'cursor-pointer hover:bg-[#333]',
-        !visible && !alwaysOn && 'opacity-50'
-      )}
       onClick={isToggleable ? onToggle : undefined}
+      onMouseEnter={() => isToggleable && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       role={isToggleable ? 'button' : undefined}
       tabIndex={isToggleable ? 0 : undefined}
       onKeyDown={
@@ -407,20 +419,28 @@ function ColumnRow({
             }
           : undefined
       }
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingLeft: '6px',
+        paddingRight: '4px',
+        height: '32px',
+        borderRadius: '4px',
+        cursor: isToggleable ? 'pointer' : 'default',
+        backgroundColor: hovered ? '#262626' : 'transparent',
+        transition: 'background 0.1s',
+        opacity: !visible && !alwaysOn ? 0.5 : 1,
+      }}
     >
-      <span
-        className={cn(
-          'text-[13px] font-medium leading-[18px]',
-          visible || alwaysOn ? 'text-[#c9c9c9]' : 'text-[#939393]'
-        )}
-      >
+      <span style={{ fontSize: '13px', fontWeight: 500, color: visible || alwaysOn ? '#c9c9c9' : '#939393', lineHeight: '18px' }}>
         {label}
       </span>
-      <div className="p-1.5">
+      <div style={{ padding: '4px' }}>
         {visible || alwaysOn ? (
-          <Eye className="h-4 w-4 text-[#939393]" />
+          <Eye style={{ width: '14px', height: '14px', color: '#939393' }} />
         ) : (
-          <EyeOff className="h-4 w-4 text-[#5d5d5d]" />
+          <EyeOff style={{ width: '14px', height: '14px', color: '#5d5d5d' }} />
         )}
       </div>
     </div>

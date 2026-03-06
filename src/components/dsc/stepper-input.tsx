@@ -30,6 +30,8 @@ interface StepperInputProps {
   decrementLabel?: string;
   disabled?: boolean;
   className?: string;
+  /** Override the inner input's width class (default: w-[54px]) */
+  inputClassName?: string;
 }
 
 const StepperInput = React.forwardRef<HTMLDivElement, StepperInputProps>(
@@ -46,6 +48,7 @@ const StepperInput = React.forwardRef<HTMLDivElement, StepperInputProps>(
       decrementLabel = 'Decrement',
       disabled,
       className,
+      inputClassName,
     },
     ref
   ) => {
@@ -76,7 +79,7 @@ const StepperInput = React.forwardRef<HTMLDivElement, StepperInputProps>(
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           disabled={disabled}
-          className="bg-transparent tabular-nums font-medium text-center text-[#fafafa] outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 rounded-l-[0.3rem] disabled:cursor-not-allowed h-6 w-10 px-1 text-[10px]"
+          className={cn('bg-transparent tabular-nums font-medium text-center text-[#fafafa] outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 rounded-l-[0.3rem] disabled:cursor-not-allowed h-6 w-[54px] px-1 text-[10px]', inputClassName)}
           aria-label="Value"
         />
 

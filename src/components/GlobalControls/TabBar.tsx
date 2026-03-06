@@ -1,5 +1,5 @@
+import { useState } from 'react';
 import { ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { useStreamStore } from '../../hooks/useStreamStore';
@@ -24,6 +24,7 @@ export function TabBar() {
     collapseAllInView,
     getFilteredStreamSets,
   } = useStreamStore();
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
   const getCount = (type: SecurityType | 'All') => {
     if (type === 'All') return streamSets.length;
@@ -34,28 +35,72 @@ export function TabBar() {
   const allExpanded = filteredIds.length > 0 && filteredIds.every((id) => expandedStreamIds.has(id));
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SecurityType | 'All')}>
-        <TabsList variant="line" className="h-8">
-          {TABS.map((tab) => {
-            const count = getCount(tab.value);
-            return (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                variant="line"
-                className="shrink-0 gap-1"
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span className="opacity-70">({count})</span>
-                )}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </Tabs>
+    <div
+      className="flex items-center justify-between border-b border-border"
+      style={{ paddingLeft: '10px', paddingRight: '10px', paddingTop: '5px', paddingBottom: '5px' }}
+    >
+      {/* DSC segmented control */}
+      <div
+        role="tablist"
+        aria-label="Security type filter"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '1px',
+          backgroundColor: 'rgba(255,255,255,0.05)',
+          borderRadius: '0.4rem',
+          padding: '2px',
+        }}
+      >
+        {TABS.map((tab) => {
+          const count = getCount(tab.value);
+          const isActive = activeTab === tab.value;
+          return (
+            <button
+              key={tab.value}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(tab.value)}
+              onMouseEnter={() => !isActive && setHoveredTab(tab.value)}
+              onMouseLeave={() => setHoveredTab(null)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '2px',
+                paddingLeft: '8px',
+                paddingRight: '8px',
+                paddingTop: '3px',
+                paddingBottom: '3px',
+                fontSize: '11px',
+                fontWeight: isActive ? 600 : 500,
+                borderRadius: '0.3rem',
+                cursor: 'pointer',
+                transition: 'background-color 0.12s, color 0.12s',
+                backgroundColor: isActive
+                  ? '#303030'
+                  : hoveredTab === tab.value
+                  ? 'rgba(255,255,255,0.06)'
+                  : 'transparent',
+                color: isActive ? '#f4f4f5' : hoveredTab === tab.value ? '#d4d4d8' : '#a1a1aa',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                borderColor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {tab.label}
+              {count > 0 && (
+                <span style={{ opacity: isActive ? 0.6 : 0.5, fontSize: '10px' }}>
+                  ({count})
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Expand/collapse toggle */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

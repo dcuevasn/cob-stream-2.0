@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
+import { Button as DSCButton } from '../dsc/button';
+import { Checkbox } from '../dsc/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -43,29 +44,38 @@ const TYPE_BADGE_LABELS: Record<SecurityType, string> = {
   'Corporate UDI': 'Corp UDI',
 };
 
-export function AddSecurityDialog() {
-  const [open, setOpen] = useState(false);
+interface AddSecurityDialogProps {
+  initialTypeFilter?: TypeFilter;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AddSecurityDialog({ initialTypeFilter, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AddSecurityDialogProps = {}) {
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled
+    ? (v: boolean) => controlledOnOpenChange?.(v)
+    : setInternalOpen;
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('All');
+  const [isFocused, setIsFocused] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(initialTypeFilter ?? 'All');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { streamSets, addSecuritiesBatch } = useStreamStore();
   const isCompact = useMediaQuery('(max-width: 540px)');
 
-  // Set of ISINs already in the app (across ALL views, not just active tab)
   const addedIsins = useMemo(
     () => new Set(streamSets.map((ss) => ss.securityISIN)),
     [streamSets]
   );
 
-  // Filter catalog by type and search query
   const filteredSecurities = useMemo(() => {
     let result = SECURITY_CATALOG;
-
     if (typeFilter !== 'All') {
       result = result.filter((s) => s.type === typeFilter);
     }
-
     const q = search.trim().toLowerCase();
     if (q) {
       result = result.filter(
@@ -75,7 +85,6 @@ export function AddSecurityDialog() {
           s.isin.toLowerCase().includes(q)
       );
     }
-
     return result;
   }, [search, typeFilter]);
 
@@ -89,7 +98,6 @@ export function AddSecurityDialog() {
     [filteredSecurities, addedIsins]
   );
 
-  // The selected catalog items (for rendering preview chips + passing to store)
   const selectedItems = useMemo(
     () => SECURITY_CATALOG.filter((s) => selectedIds.has(s.id)),
     [selectedIds]
@@ -99,11 +107,8 @@ export function AddSecurityDialog() {
     if (isDisabled) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
@@ -118,9 +123,7 @@ export function AddSecurityDialog() {
     });
   }, [filteredSecurities, addedIsins]);
 
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
+  const handleClearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
   const handleRemoveChip = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -132,9 +135,9 @@ export function AddSecurityDialog() {
 
   const resetState = useCallback(() => {
     setSearch('');
-    setTypeFilter('All');
+    setTypeFilter(initialTypeFilter ?? 'All');
     setSelectedIds(new Set());
-  }, []);
+  }, [initialTypeFilter]);
 
   const handleAddSelection = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -165,71 +168,119 @@ export function AddSecurityDialog() {
 
   return (
     <>
-      {/* Trigger button — same styling as original in Toolbar */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="default"
-            size={isCompact ? 'icon-sm' : 'sm'}
-            onClick={() => setOpen(true)}
-            className={cn('gap-1 shrink-0 px-3 w-fit h-7', isCompact && 'h-8 min-w-8')}
-          >
-            <Plus className="h-4 w-4" />
-            {!isCompact && <span className="truncate max-w-[120px]">Add security</span>}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Add security</TooltipContent>
-      </Tooltip>
+      {!isControlled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="default"
+              size={isCompact ? 'icon-sm' : 'sm'}
+              onClick={() => setOpen(true)}
+              className={cn('gap-1 shrink-0 w-fit h-7', isCompact && 'h-8 min-w-8')}
+              style={{ paddingLeft: '12px', paddingRight: '12px' }}
+            >
+              <Plus className="h-4 w-4" />
+              {!isCompact && <span className="truncate max-w-[120px]">Add security</span>}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Add security</TooltipContent>
+        </Tooltip>
+      )}
 
-      {/* Dialog */}
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           aria-label="Add Securities Dialog"
-          className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
+          className="max-w-3xl max-h-[85vh] flex flex-col gap-0 overflow-hidden"
+          style={{ padding: 0 }}
         >
-          {/* ── Header ─────────────────────────────────────────────────────── */}
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-            <DialogTitle>Add Securities</DialogTitle>
-            <DialogDescription>
+          {/* ── Header ──────────────────────────────────────────────────── */}
+          <DialogHeader
+            className="shrink-0 border-b border-border/50"
+            style={{ paddingLeft: '20px', paddingRight: '20px', paddingTop: '14px', paddingBottom: '12px' }}
+          >
+            <DialogTitle className="text-[13px] font-semibold text-[#fafafa]">
+              Add Securities
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-[#a1a1a1]">
               Search and select securities to add to your view
             </DialogDescription>
           </DialogHeader>
 
-          {/* ── Section A: Search & Filters ──────────────────────────────── */}
-          <div className="px-6 py-4 border-b border-border shrink-0 space-y-3">
-            {/* Search input */}
+          {/* ── Search & Filters ─────────────────────────────────────────── */}
+          <div
+            className="shrink-0 border-b border-border/50"
+            style={{ paddingLeft: '16px', paddingRight: '16px', paddingTop: '12px', paddingBottom: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}
+          >
+            {/* DSC search input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
+              <Search
+                className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ left: '10px', width: '12px', height: '12px', color: '#a1a1a1' }}
+                aria-hidden="true"
+              />
+              <input
+                ref={searchRef}
+                type="text"
                 placeholder="Search by name, ISIN, or ticker..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 pr-9 h-9"
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setSearch(''); searchRef.current?.blur(); } }}
                 autoFocus
+                style={{
+                  width: '100%',
+                  height: '32px',
+                  backgroundColor: '#262626',
+                  borderWidth: '1.5px',
+                  borderStyle: 'solid',
+                  borderColor: isFocused ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)',
+                  borderRadius: '0.3rem',
+                  paddingLeft: '30px',
+                  paddingRight: search ? '30px' : '10px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: '#fafafa',
+                  outline: 'none',
+                  transition: 'border-color 0.15s',
+                }}
+                className="placeholder:text-[#555]"
+                aria-label="Search securities"
               />
               {search && (
                 <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => { setSearch(''); searchRef.current?.focus(); }}
+                  className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center text-[#a1a1a1] hover:text-[#fafafa] transition-colors"
+                  style={{ right: '8px', width: '16px', height: '16px' }}
                   aria-label="Clear search"
                 >
-                  <X className="h-4 w-4" />
+                  <X style={{ width: '10px', height: '10px' }} />
                 </button>
               )}
             </div>
 
             {/* Type filter pills */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-[6px] flex-wrap">
               {TYPE_FILTERS.map(({ value, label }) => (
                 <button
                   key={value}
                   onClick={() => setTypeFilter(value)}
-                  className={cn(
-                    'px-2.5 py-1 text-xs rounded-md border transition-colors',
-                    typeFilter === value
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-transparent text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                  )}
+                  style={{
+                    paddingLeft: '8px',
+                    paddingRight: '8px',
+                    paddingTop: '2px',
+                    paddingBottom: '2px',
+                    fontSize: '10px',
+                    fontWeight: 500,
+                    borderRadius: '0.3rem',
+                    borderWidth: '1.5px',
+                    borderStyle: 'solid',
+                    borderColor: typeFilter === value ? 'transparent' : 'rgba(255,255,255,0.1)',
+                    backgroundColor: typeFilter === value ? '#2b7fff' : '#262626',
+                    color: typeFilter === value ? '#fafafa' : '#a1a1a1',
+                    transition: 'background-color 0.1s, color 0.1s',
+                    cursor: 'pointer',
+                  }}
+                  className="hover:text-[#fafafa]"
                 >
                   {label}
                 </button>
@@ -238,67 +289,85 @@ export function AddSecurityDialog() {
 
             {/* Results count */}
             {resultsLabel && (
-              <p className="text-xs text-muted-foreground">{resultsLabel}</p>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>{resultsLabel}</p>
             )}
           </div>
 
-          {/* ── Section B: Securities list ───────────────────────────────── */}
+          {/* ── Securities list ──────────────────────────────────────────── */}
           <div className="flex-1 overflow-y-auto min-h-0" role="list" aria-label="Available securities">
             {filteredSecurities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
-                <Search className="h-8 w-8 opacity-30" />
+              <div className="flex flex-col items-center justify-center h-40 gap-2" style={{ color: '#6b7280' }}>
+                <Search style={{ width: '28px', height: '28px', opacity: 0.3 }} />
                 {search ? (
                   <>
-                    <p className="text-sm">No securities found for &ldquo;{search}&rdquo;</p>
-                    <p className="text-xs opacity-60">Try different search terms or clear the filter</p>
+                    <p style={{ fontSize: '12px' }}>No securities found for &ldquo;{search}&rdquo;</p>
+                    <p style={{ fontSize: '11px', opacity: 0.6 }}>Try different search terms or clear the filter</p>
                   </>
                 ) : (
-                  <p className="text-sm">No securities available</p>
+                  <p style={{ fontSize: '12px' }}>No securities available</p>
                 )}
               </div>
             ) : (
-              <div className="divide-y divide-border/40">
-                {filteredSecurities.map((security) => {
-                  const isAlreadyAdded = addedIsins.has(security.isin);
-                  const isSelected = selectedIds.has(security.id);
-                  return (
-                    <SecurityRow
-                      key={security.id}
-                      security={security}
-                      isAlreadyAdded={isAlreadyAdded}
-                      isSelected={isSelected}
-                      onToggle={handleToggle}
-                    />
-                  );
-                })}
+              <div className="divide-y divide-border/30">
+                {filteredSecurities.map((security) => (
+                  <SecurityRow
+                    key={security.id}
+                    security={security}
+                    isAlreadyAdded={addedIsins.has(security.isin)}
+                    isSelected={selectedIds.has(security.id)}
+                    onToggle={handleToggle}
+                  />
+                ))}
               </div>
             )}
           </div>
 
-          {/* ── Section C: Selected preview ──────────────────────────────── */}
-          <div className="px-6 py-3 border-t border-border shrink-0 bg-muted/20 min-h-[48px]">
-            <div className="flex items-start gap-2">
-              <span className="text-xs font-medium text-muted-foreground shrink-0 pt-0.5 min-w-[90px]">
+          {/* ── Selected preview ─────────────────────────────────────────── */}
+          <div
+            className="shrink-0 border-t border-border/50 bg-muted/10"
+            style={{ paddingLeft: '16px', paddingRight: '16px', paddingTop: '8px', paddingBottom: '8px', minHeight: '40px' }}
+          >
+            <div className="flex items-start gap-[8px]">
+              <span
+                className="shrink-0"
+                style={{ fontSize: '11px', fontWeight: 500, color: '#a1a1a1', paddingTop: '2px', minWidth: '80px' }}
+              >
                 Selected ({selectedIds.size})
               </span>
               {selectedIds.size === 0 ? (
-                <span className="text-xs text-muted-foreground/50 italic pt-0.5">
+                <span style={{ fontSize: '11px', color: '#444', fontStyle: 'italic', paddingTop: '2px' }}>
                   Select securities from the list above
                 </span>
               ) : (
-                <div className="flex flex-wrap gap-1.5 min-w-0">
+                <div className="flex flex-wrap gap-[4px] min-w-0">
                   {selectedItems.map((item) => (
                     <span
                       key={item.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-xs text-primary"
+                      className="inline-flex items-center gap-[4px]"
+                      style={{
+                        paddingLeft: '6px',
+                        paddingRight: '4px',
+                        paddingTop: '2px',
+                        paddingBottom: '2px',
+                        borderRadius: '0.3rem',
+                        backgroundColor: 'rgba(43,127,255,0.12)',
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
+                        borderColor: 'rgba(43,127,255,0.25)',
+                        fontSize: '10px',
+                        fontWeight: 500,
+                        color: '#6ba5ff',
+                        fontFamily: 'monospace',
+                      }}
                     >
-                      <span className="font-mono">{item.alias}</span>
+                      {item.alias}
                       <button
                         onClick={() => handleRemoveChip(item.id)}
-                        className="hover:text-primary/60 transition-colors shrink-0"
+                        className="flex items-center justify-center text-[#6ba5ff] hover:text-[#fafafa] transition-colors shrink-0"
+                        style={{ width: '12px', height: '12px' }}
                         aria-label={`Remove ${item.alias} from selection`}
                       >
-                        <X className="h-3 w-3" />
+                        <X style={{ width: '9px', height: '9px' }} />
                       </button>
                     </span>
                   ))}
@@ -307,45 +376,48 @@ export function AddSecurityDialog() {
             </div>
           </div>
 
-          {/* ── Section D: Footer actions ─────────────────────────────────── */}
-          <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between gap-3">
-            {/* Left: Clear selection */}
-            <Button
+          {/* ── Footer ───────────────────────────────────────────────────── */}
+          <div
+            className="shrink-0 border-t border-border/50 flex items-center justify-between gap-2"
+            style={{ paddingLeft: '16px', paddingRight: '16px', paddingTop: '10px', paddingBottom: '10px' }}
+          >
+            <DSCButton
               variant="ghost"
               size="sm"
               onClick={handleClearSelection}
               disabled={selectedIds.size === 0}
-              className="h-8 text-muted-foreground hover:text-foreground"
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
             >
               Clear selection
-            </Button>
+            </DSCButton>
 
-            {/* Right: Add All · Cancel · Add Selection */}
-            <div className="flex items-center gap-2">
-              <Button
+            <div className="flex items-center gap-[6px]">
+              <DSCButton
                 variant="outline"
                 size="sm"
                 onClick={handleAddAll}
                 disabled={availableCount === 0}
-                className="h-8"
+                style={{ paddingLeft: '10px', paddingRight: '10px' }}
               >
-                Add all
-                {availableCount > 0 && (
-                  <span className="ml-1 text-muted-foreground text-xs">({availableCount})</span>
-                )}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleCancel} className="h-8">
+                Add all ({availableCount})
+              </DSCButton>
+              <DSCButton
+                variant="secondary"
+                size="sm"
+                onClick={handleCancel}
+                style={{ paddingLeft: '10px', paddingRight: '10px' }}
+              >
                 Cancel
-              </Button>
-              <Button
+              </DSCButton>
+              <DSCButton
                 variant="default"
                 size="sm"
                 onClick={handleAddSelection}
                 disabled={selectedIds.size === 0}
-                className="h-8 min-w-[110px]"
+                style={{ paddingLeft: '12px', paddingRight: '12px', minWidth: '80px' }}
               >
                 {selectedIds.size > 0 ? `Add (${selectedIds.size})` : 'Add'}
-              </Button>
+              </DSCButton>
             </div>
           </div>
         </DialogContent>
@@ -354,7 +426,7 @@ export function AddSecurityDialog() {
   );
 }
 
-// ── SecurityRow ──────────────────────────────────────────────────────────────
+// ── SecurityRow ───────────────────────────────────────────────────────────────
 
 interface SecurityRowProps {
   security: SecurityCatalogItem;
@@ -369,71 +441,76 @@ function SecurityRow({ security, isAlreadyAdded, isSelected, onToggle }: Securit
       role="listitem"
       onClick={() => onToggle(security.id, isAlreadyAdded)}
       title={isAlreadyAdded ? 'Already added to your view' : undefined}
-      className={cn(
-        'flex items-center gap-3 px-4 py-2.5 select-none transition-colors',
-        isAlreadyAdded
-          ? 'opacity-45 cursor-not-allowed'
-          : isSelected
-          ? 'bg-primary/8 cursor-pointer hover:bg-primary/12'
-          : 'cursor-pointer hover:bg-muted/50'
-      )}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        paddingLeft: '16px',
+        paddingRight: '16px',
+        paddingTop: '7px',
+        paddingBottom: '7px',
+        cursor: isAlreadyAdded ? 'not-allowed' : 'pointer',
+        opacity: isAlreadyAdded ? 0.55 : 1,
+        backgroundColor: isSelected ? 'rgba(43,127,255,0.07)' : 'transparent',
+        transition: 'background-color 0.1s',
+        userSelect: 'none',
+      }}
+      className={cn(!isAlreadyAdded && !isSelected && 'hover:bg-white/[0.03]')}
     >
-      {/* Checkbox indicator */}
-      <div className="shrink-0 w-4 h-4 flex items-center justify-center">
-        {isAlreadyAdded ? (
-          <div className="w-4 h-4 rounded border border-muted-foreground/25 bg-muted/40" />
-        ) : isSelected ? (
-          <div className="w-4 h-4 rounded border-2 border-primary bg-primary flex items-center justify-center">
-            <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-primary-foreground stroke-[1.8]" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1.5,5 4,7.5 8.5,2.5" />
-            </svg>
-          </div>
-        ) : (
-          <div className="w-4 h-4 rounded border-2 border-muted-foreground/35 group-hover:border-primary/50 transition-colors" />
-        )}
-      </div>
+      {/* DSC Checkbox */}
+      <Checkbox
+        checked={isSelected}
+        disabled={isAlreadyAdded}
+        onCheckedChange={() => onToggle(security.id, isAlreadyAdded)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Select ${security.alias}`}
+      />
 
-      {/* Alias (short name) */}
+      {/* Alias */}
       <span
-        className={cn(
-          'font-mono text-sm font-medium shrink-0 w-16',
-          isAlreadyAdded ? 'text-muted-foreground' : 'text-foreground'
-        )}
+        style={{
+          fontFamily: 'monospace',
+          fontSize: '11px',
+          fontWeight: 600,
+          width: '64px',
+          flexShrink: 0,
+          color: '#fafafa',
+        }}
       >
         {security.alias}
       </span>
 
       {/* Full name */}
       <span
-        className={cn(
-          'text-sm flex-1 min-w-0 truncate',
-          isAlreadyAdded ? 'text-muted-foreground/60' : 'text-muted-foreground'
-        )}
+        style={{
+          fontSize: '11px',
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: '#a1a1a1',
+        }}
       >
         {security.name}
       </span>
 
-      {/* ISIN — hidden on small screens */}
-      <span className="font-mono text-xs text-muted-foreground/50 shrink-0 hidden sm:block w-[108px] text-right">
+      {/* ISIN */}
+      <span
+        className="hidden sm:block shrink-0 text-right"
+        style={{ fontFamily: 'monospace', fontSize: '10px', color: '#6b7280', width: '108px' }}
+      >
         {security.isin}
       </span>
 
       {/* Type badge */}
       <span
-        className={cn(
-          'px-1.5 py-0.5 text-[10px] font-medium rounded border shrink-0 hidden xs:inline-block',
-          TYPE_BADGE_STYLES[security.type]
-        )}
+        className={cn('px-1.5 py-0.5 rounded border shrink-0 hidden xs:inline-block', TYPE_BADGE_STYLES[security.type])}
+        style={{ fontSize: '10px', fontWeight: 500 }}
       >
         {TYPE_BADGE_LABELS[security.type]}
       </span>
 
-      {/* Already-added indicator */}
-      {isAlreadyAdded && (
-        <span className="px-1.5 py-0.5 text-[10px] rounded border border-muted-foreground/20 bg-muted/40 text-muted-foreground shrink-0">
-          Added
-        </span>
-      )}
     </div>
   );
 }

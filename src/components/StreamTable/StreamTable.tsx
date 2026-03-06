@@ -1,24 +1,20 @@
+import { useState } from 'react';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { StreamRow } from './StreamRow';
 import { StreamTableHeader } from './StreamTableHeader';
 import type { SecurityType } from '../../types/streamSet';
 import { cn } from '../../lib/utils';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '../ui/empty';
+import { Empty } from '../ui/empty';
 import { Button } from '../ui/button';
+import { Button as DSCButton } from '../dsc/button';
+import { AddSecurityDialog } from '../GlobalControls/AddSecurityDialog';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '../ui/accordion';
-import { Search, BarChart3, Plus, Sparkles } from 'lucide-react';
+import { Search, Waves, Plus } from 'lucide-react';
 
 /** Fixed order and display labels for All view accordion sections */
 const ACCORDION_SECTIONS: { type: SecurityType; label: string }[] = [
@@ -48,8 +44,6 @@ export function StreamTable({ securityType }: StreamTableProps) {
     activeTab,
     searchQuery,
     setSearchQuery,
-    addStreamSet,
-    generateDemoData,
     accordionOpenSections,
     setAccordionOpenSections,
   } = useStreamStore();
@@ -61,60 +55,69 @@ export function StreamTable({ securityType }: StreamTableProps) {
     : { [securityType || activeTab]: streams };
 
   const hasSearchFilter = searchQuery.trim().length > 0;
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   if (streams.length === 0) {
     const addSecurityType: SecurityType = activeTab === 'All' ? 'M Bono' : activeTab;
     return (
-      <Empty className="flex-1 min-h-0 flex">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            {hasSearchFilter ? (
-              <Search className="h-8 w-8 text-muted-foreground" />
-            ) : (
-              <BarChart3 className="h-8 w-8 text-muted-foreground" />
-            )}
-          </EmptyMedia>
-          <EmptyTitle>
-            {hasSearchFilter ? 'No streams found' : 'No stream sets found'}
-          </EmptyTitle>
-          <EmptyDescription>
+      <Empty className="flex-1 min-h-0 flex" style={{ padding: '0' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '32px 36px',
+            border: '1px dashed rgba(255,255,255,0.1)',
+            borderRadius: '12px',
+            minWidth: '240px',
+            maxWidth: '300px',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             {hasSearchFilter
-              ? 'Try a different search term or clear the filter to see your streams.'
-              : 'Get started by adding a security or generating demo data for this view.'}
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
+              ? <Search style={{ width: '16px', height: '16px', color: '#71717a' }} />
+              : <Waves style={{ width: '16px', height: '16px', color: '#71717a' }} />
+            }
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5', letterSpacing: '-0.01em' }}>
+              {hasSearchFilter ? 'No results found' : 'No streams yet'}
+            </span>
+            <span style={{ fontSize: '12px', color: '#a1a1aa', lineHeight: '1.6' }}>
+              {hasSearchFilter
+                ? 'No streams match your search. Try adjusting your search terms.'
+                : 'Get started by adding a security to this view.'}
+            </span>
+          </div>
           {hasSearchFilter ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSearchQuery('')}
-            >
+            <DSCButton variant="outline" size="sm" style={{ paddingLeft: '20px', paddingRight: '20px' }} onClick={() => setSearchQuery('')}>
               Clear search
-            </Button>
+            </DSCButton>
           ) : (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => addStreamSet(addSecurityType)}
-                className="gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                Add security
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => generateDemoData('new_stream')}
-                className="gap-1.5"
-              >
-                <Sparkles className="h-4 w-4" />
-                Generate Demo Data
-              </Button>
-            </>
+            <DSCButton variant="outline" size="sm" style={{ paddingLeft: '20px', paddingRight: '20px' }} onClick={() => setAddDialogOpen(true)} className="gap-1.5">
+              <Plus style={{ width: '12px', height: '12px' }} />
+              Add security
+            </DSCButton>
           )}
-        </EmptyContent>
+        </div>
+        <AddSecurityDialog
+          open={addDialogOpen}
+          onOpenChange={setAddDialogOpen}
+          initialTypeFilter={activeTab === 'All' ? 'All' : activeTab}
+        />
       </Empty>
     );
   }
@@ -138,18 +141,20 @@ export function StreamTable({ securityType }: StreamTableProps) {
           {ACCORDION_SECTIONS.map(({ type, label }) => {
             const typeStreams = groupedStreams[type] ?? [];
             if (typeStreams.length === 0) return null;
+            const isOpen = accordionOpenSections.includes(type);
             return (
               <AccordionItem key={type} value={type} className="border-border">
                 <AccordionTrigger
                   className={cn(
-                    'sticky top-0 z-10 px-4 py-2 border-b border-border hover:no-underline',
+                    'sticky top-0 z-10 border-b border-border hover:no-underline',
                     'transition-colors duration-150 cursor-pointer',
                     'hover:bg-muted/80 hover:text-foreground',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                     ACCORDION_BG[type]
                   )}
+                  style={{ paddingLeft: '12px', paddingRight: '12px', paddingTop: '4px', paddingBottom: '4px' }}
                 >
-                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', color: isOpen ? '#e4e4e7' : '#a1a1aa', transition: 'color 0.15s' }}>
                     {label} ({typeStreams.length})
                   </span>
                 </AccordionTrigger>
