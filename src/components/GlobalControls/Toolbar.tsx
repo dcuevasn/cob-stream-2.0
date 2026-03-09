@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, RotateCcw, ChevronDown, Columns, FlaskConical, EyeOff } from 'lucide-react';
+import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, ChevronDown, Columns, FlaskConical, EyeOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { AddSecurityDialog } from './AddSecurityDialog';
 import {
@@ -142,9 +142,10 @@ export function Toolbar() {
                 variant="outline"
                 size={isCompact ? 'icon-sm' : 'sm'}
                 className={cn(
-                  'gap-1 shrink-0 px-3 bg-amber-500/15 border-amber-500/50 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300',
-                  isCompact && 'h-8 min-w-8 px-3'
+                  'gap-1 shrink-0 bg-amber-500/15 border-amber-500/50 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300',
+                  isCompact && 'h-8 min-w-8'
                 )}
+                style={{ paddingLeft: '12px', paddingRight: '12px' }}
                 title="Test Only - Generate demo data"
               >
                 <FlaskConical className="h-4 w-4" />
@@ -208,12 +209,13 @@ export function Toolbar() {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
-                size={isCompact ? 'icon-sm' : 'default'}
+                size={isCompact ? 'icon-sm' : 'sm'}
                 className={cn(
-                  'gap-1 shrink-0 px-3 text-red-400 border-red-400/50 hover:bg-red-400/10 hover:text-red-300',
-                  isCompact && 'h-8 min-w-8 px-3',
+                  'gap-1 shrink-0 text-red-400 border-red-400/50 hover:bg-red-400/10 hover:text-red-300',
+                  isCompact && 'h-8 min-w-8',
                   isBatchPausing && 'opacity-80 cursor-wait'
                 )}
+                style={{ paddingLeft: '12px', paddingRight: '12px' }}
                 title="Stop All"
                 disabled={isBatchPausing}
               >
@@ -256,12 +258,13 @@ export function Toolbar() {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="success"
-                size={isCompact ? 'icon-sm' : 'default'}
+                size={isCompact ? 'icon-sm' : 'sm'}
                 className={cn(
-                  'gap-1 shrink-0 min-w-[32px] px-3',
+                  'gap-1 shrink-0 min-w-[32px]',
                   isCompact && 'h-8 min-w-8',
                   isBatchLaunching && 'opacity-80 cursor-wait'
                 )}
+                style={{ paddingLeft: '12px', paddingRight: '12px' }}
                 title="Launch All"
                 disabled={isBatchLaunching}
               >
@@ -301,29 +304,6 @@ export function Toolbar() {
 
   const secondaryActions = (
     <>
-      {hasStagedStreams && (
-        <>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 w-fit min-w-0"
-              onClick={handleBatchRevert}
-              disabled={isReverting}
-              title="Cancel all staged changes"
-            >
-              {isReverting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Cancel edits'}
-            </Button>
-            <Button
-              className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 shrink-0 w-fit min-w-0"
-              onClick={handleBatchApply}
-              disabled={isApplying}
-              title="Apply all staged changes"
-            >
-              {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply changes'}
-            </Button>
-          </div>
-          <div className="h-6 w-px bg-border shrink-0" />
-        </>
-      )}
       <BatchMaxLevelsPopover />
       <BatchSizePopover />
       <div className="h-6 w-px bg-border shrink-0" />
@@ -333,27 +313,6 @@ export function Toolbar() {
 
   const moreMenuItems = (
     <>
-      {hasStagedStreams && (
-        <>
-          <DropdownMenuItem onClick={handleBatchRevert} disabled={isReverting}>
-            {isReverting ? (
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-            ) : (
-              <RotateCcw className="h-4 w-4 shrink-0" />
-            )}
-            Cancel edits (all)
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleBatchApply} disabled={isApplying}>
-            {isApplying ? (
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-            ) : (
-              <Play className="h-4 w-4 shrink-0" />
-            )}
-            Apply changes (all)
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-        </>
-      )}
       <DropdownMenuSeparator />
       <DropdownMenuLabel>Test Only - Demo Data</DropdownMenuLabel>
       <DropdownMenuItem onClick={() => generateDemoData('new_stream')}>
@@ -433,7 +392,7 @@ export function Toolbar() {
             </div>
 
             {/* Action Buttons - Right Side */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 ml-auto">
               {primaryActions}
               {isWide ? (
                 <>
@@ -445,7 +404,7 @@ export function Toolbar() {
                   <div className="h-6 w-px bg-border shrink-0" />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1 shrink-0 px-3">
+                      <Button variant="outline" size="sm" className="gap-1 shrink-0" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
                         <MoreHorizontal className="h-4 w-4" />
                         More
                       </Button>
@@ -459,16 +418,15 @@ export function Toolbar() {
             </div>
           </div>
 
-          {/* Status Indicators: directly below buttons, right-aligned */}
+          {/* Status Indicators: directly below buttons, staged actions on left, status on right */}
           <div
             role="status"
             aria-live="polite"
-            className={cn(
-              'flex items-center min-h-[24px] w-full mt-2 pt-2 border-t border-border/50 bg-muted/20',
-              'justify-end'
-            )}
+            className="flex items-center justify-between w-full mt-2 border-t border-border/50 bg-muted/20"
+            style={{ minHeight: '28px', paddingTop: '6px', paddingBottom: '6px', paddingLeft: '4px', paddingRight: '4px' }}
             title={`${activeStreamsCount} Active Streams, ${activeOrdersCount} Active Orders${inactiveCount > 0 ? `, ${inactiveCount} Inactive` : ''}${stagingCount > 0 ? `, ${stagingCount} Staging` : ''}${haltedCount > 0 ? `, ${haltedCount} Halted` : ''}`}
           >
+            {/* Status counters - left side */}
             <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-muted-foreground shrink-0">
               {/* Only show active indicators when there are active streams */}
               {activeStreamsCount > 0 && (
@@ -504,6 +462,30 @@ export function Toolbar() {
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-halted)] shrink-0" />
                   <span className="text-[var(--status-halted)] truncate">{haltedCount} Halted</span>
                 </span>
+              )}
+            </div>
+
+            {/* Staged changes actions - right side */}
+            <div className="flex items-center gap-[6px] shrink-0">
+              {hasStagedStreams && (
+                <>
+                  <Button
+                    className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-zinc-600 text-zinc-200 hover:bg-zinc-500 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 border-0 shrink-0 w-fit min-w-0"
+                    onClick={handleBatchRevert}
+                    disabled={isReverting}
+                    title="Cancel all staged changes"
+                  >
+                    {isReverting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Cancel edits'}
+                  </Button>
+                  <Button
+                    className="!h-[22px] !min-h-[22px] !px-2 !py-1 rounded-md text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 shrink-0 w-fit min-w-0"
+                    onClick={handleBatchApply}
+                    disabled={isApplying}
+                    title="Apply all staged changes"
+                  >
+                    {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply changes'}
+                  </Button>
+                </>
               )}
             </div>
           </div>

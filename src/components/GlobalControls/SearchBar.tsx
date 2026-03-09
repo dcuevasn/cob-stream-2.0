@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
 
 const SEARCH_DEBOUNCE_MS = 80;
@@ -10,11 +9,13 @@ const SEARCH_DEBOUNCE_MS = 80;
 export function SearchBar() {
   const { searchQuery, setSearchQuery, isLoading, getFilteredStreamSets } = useStreamStore();
   const [inputValue, setInputValue] = useState(searchQuery);
+  const [isFocused, setIsFocused] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filteredCount = getFilteredStreamSets().length;
   const hasSearch = searchQuery.trim().length > 0;
+  const noResults = hasSearch && filteredCount === 0;
 
   // Sync local state when store resets (e.g. tab change)
   useEffect(() => {
@@ -62,24 +63,31 @@ export function SearchBar() {
   );
 
   const handleFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(true);
     if (inputValue) {
       (e.target as HTMLInputElement).select();
     }
   }, [inputValue]);
 
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-[6px]">
       <div
-        className={cn(
-          'relative w-[300px] min-w-0',
-          isLoading && 'pointer-events-none opacity-50'
-        )}
+        className={cn('relative shrink-0', isLoading && 'pointer-events-none opacity-50')}
+        style={{ width: '220px' }}
       >
+        {/* Search icon */}
         <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10"
+          className="absolute left-[8px] top-1/2 -translate-y-1/2 pointer-events-none z-10"
+          style={{ width: '11px', height: '11px', color: noResults ? '#f87171' : '#a1a1a1' }}
           aria-hidden="true"
         />
-        <Input
+
+        {/* Input */}
+        <input
           ref={inputRef}
           type="text"
           placeholder="Search streams..."
@@ -87,14 +95,34 @@ export function SearchBar() {
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
+          onBlur={handleBlur}
           disabled={isLoading}
-          className={cn(
-            'pl-9 pr-9',
-            hasSearch && filteredCount === 0 && 'border-destructive/50 focus-visible:border-destructive/70 focus-visible:ring-destructive/30'
-          )}
           aria-label="Search streams"
           aria-describedby={hasSearch ? 'search-results-hint' : undefined}
+          style={{
+            height: '28px',
+            width: '100%',
+            backgroundColor: '#262626',
+            borderWidth: '1.5px',
+            borderStyle: 'solid',
+            borderColor: noResults
+              ? 'rgba(248,113,113,0.5)'
+              : isFocused
+              ? 'rgba(99,102,241,0.6)'
+              : 'rgba(255,255,255,0.1)',
+            borderRadius: '0.3rem',
+            paddingLeft: '26px',
+            paddingRight: inputValue ? '26px' : '8px',
+            fontSize: '11px',
+            fontWeight: 500,
+            color: '#fafafa',
+            outline: 'none',
+            transition: 'border-color 0.15s',
+          }}
+          className="tabular-nums placeholder:text-[#555]"
         />
+
+        {/* Clear button */}
         {inputValue && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -102,33 +130,44 @@ export function SearchBar() {
                 type="button"
                 onClick={handleClear}
                 aria-label="Clear search"
-                className={cn(
-                  'absolute right-3 top-1/2 -translate-y-1/2 z-10',
-                  'flex items-center justify-center h-5 w-5 rounded-sm',
-                  'text-muted-foreground hover:text-foreground',
-                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                  'transition-colors'
-                )}
+                style={{
+                  position: 'absolute',
+                  right: '6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '16px',
+                  height: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '0.2rem',
+                  color: '#a1a1a1',
+                  transition: 'color 0.1s',
+                }}
+                className="hover:text-[#fafafa] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 z-10"
               >
-                <X className="h-4 w-4" />
+                <X style={{ width: '10px', height: '10px' }} />
               </button>
             </TooltipTrigger>
             <TooltipContent>Clear search (Esc)</TooltipContent>
           </Tooltip>
         )}
       </div>
+
+      {/* Results count */}
       {hasSearch && (
         <span
           id="search-results-hint"
-          className={cn(
-            'shrink-0 text-xs tabular-nums transition-opacity',
-            filteredCount === 0
-              ? 'text-destructive/90'
-              : 'text-muted-foreground'
-          )}
+          className="shrink-0 tabular-nums transition-opacity"
+          style={{
+            fontSize: '10px',
+            fontWeight: 500,
+            color: noResults ? '#f87171' : '#a1a1a1',
+            whiteSpace: 'nowrap',
+          }}
           aria-live="polite"
         >
-          {filteredCount === 0 ? 'No matches' : `${filteredCount} result${filteredCount !== 1 ? 's' : ''}`}
+          {noResults ? 'No matches' : `${filteredCount} result${filteredCount !== 1 ? 's' : ''}`}
         </span>
       )}
     </div>

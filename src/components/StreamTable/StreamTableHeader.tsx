@@ -177,7 +177,8 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="w-[165px] p-2 text-[10px] leading-tight shadow-sm"
+        style={{ padding: '8px' }}
+        className="w-[165px] text-[10px] leading-tight shadow-sm"
       >
         <div
           role="group"
@@ -189,24 +190,22 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
             Adjust Spread (All Levels)
           </p>
 
-          {/* ── BPS · Stepper · Apply ── */}
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0 leading-none">BPS</span>
-
-            {/* DSC StepperInput xs */}
-            <StepperInput
-              value={inputStr}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              onFocus={(e) => e.currentTarget.select()}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-              onIncrement={() => handlePlus()}
-              onDecrement={() => handleMinus()}
-              incrementLabel={`Increase by ${stepSize} bps`}
-              decrementLabel={`Decrease by ${stepSize} bps`}
-            />
-
-            {/* Spread Control Settings — opens nested settings popover */}
+          {/* ── BPS · Stepper · Settings ── */}
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0 leading-none">BPS</span>
+              <StepperInput
+                value={inputStr}
+                onChange={handleInputChange}
+                onBlur={handleBlur}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                onIncrement={() => handlePlus()}
+                onDecrement={() => handleMinus()}
+                incrementLabel={`Increase by ${stepSize} bps`}
+                decrementLabel={`Decrease by ${stepSize} bps`}
+              />
+            </div>
             <SpreadStepSettings />
           </div>
 
@@ -221,14 +220,16 @@ function BatchSpreadColumnPopover({ side, securityType }: BatchSpreadColumnPopov
               onClick={(e) => { e.stopPropagation(); handleReset(); }}
               className="whitespace-nowrap"
               aria-label="Reset to default spread"
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
             >
               Default SPRD.
             </Button>
             <Button
               size="xs"
-              variant="outline"
+              variant="secondary"
               onClick={(e) => { e.stopPropagation(); handleCancel(); }}
               aria-label="Cancel and revert adjustment"
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
             >
               Cancel
             </Button>

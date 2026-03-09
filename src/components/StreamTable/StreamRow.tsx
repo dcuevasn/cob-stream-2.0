@@ -328,6 +328,7 @@ function IndependentPriceSourcesPanel({
   const commitBid = useCallback(() => {
     const n = parseFloat(bidInput);
     if (!isNaN(n) && n >= 0) {
+      if (bidVal !== undefined && Math.abs(n - bidVal) <= 0.0001) return;
       updateStreamSet(stream.id, {
         bidReferencePrice: { ...(stream.bidReferencePrice ?? stream.referencePrice), source: 'manual', value: n, timestamp: new Date().toISOString(), isOverride: false, manualBid: n },
       });
@@ -337,6 +338,7 @@ function IndependentPriceSourcesPanel({
   const commitAsk = useCallback(() => {
     const n = parseFloat(askInput);
     if (!isNaN(n) && n >= 0) {
+      if (askVal !== undefined && Math.abs(n - askVal) <= 0.0001) return;
       updateStreamSet(stream.id, {
         askReferencePrice: { ...(stream.askReferencePrice ?? stream.referencePrice), source: 'manual', value: n, timestamp: new Date().toISOString(), isOverride: false, manualAsk: n },
       });
@@ -572,7 +574,7 @@ function MaxLvlsInput({
   const commit = () => {
     const v = Math.min(5, Math.max(0, parseInt(inputVal, 10) || 0));
     setInputVal(String(v));
-    onChange(v);
+    if (v !== value) onChange(v);
   };
   return (
     <StepperInput
@@ -683,9 +685,11 @@ function BatchSpreadHeader({
     const rounded = !isNaN(n) ? roundBps(n) : 0;
     setAdjustmentValue(rounded);
     setInputStr(rounded === 0 ? '0' : formatSpreadBps(rounded));
-    const base = getBase();
-    if (base.length > 0) {
-      onBatchAdjust(side, base, rounded);
+    if (rounded !== adjustmentValue) {
+      const base = getBase();
+      if (base.length > 0) {
+        onBatchAdjust(side, base, rounded);
+      }
     }
   };
 

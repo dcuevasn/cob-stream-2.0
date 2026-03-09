@@ -1,13 +1,9 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Layers } from 'lucide-react';
-import { Button } from '../ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
+import { Button as DSCButton } from '../dsc/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../dsc/popover';
+import { StepperInput } from '../dsc/stepper-input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { cn } from '../../lib/utils';
 import { useStreamStore } from '../../hooks/useStreamStore';
 
 /** Clamp value to 0-5, same as per-stream MAX Lvls inputs */
@@ -59,37 +55,25 @@ export function BatchMaxLevelsPopover() {
 
   const handleBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-
-    // Allow empty string (user is clearing input)
-    if (raw === '') {
-      setBidInput('');
-      return;
-    }
-
-    // Parse and clamp to valid range 0-5
+    if (raw === '') { setBidInput(''); return; }
     const parsed = parseInt(raw, 10);
-    if (!isNaN(parsed)) {
-      const clamped = Math.min(5, Math.max(0, parsed));
-      setBidInput(String(clamped));
-    }
+    if (!isNaN(parsed)) setBidInput(String(clampMaxLvls(parsed)));
   }, []);
 
   const handleAskChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-
-    // Allow empty string (user is clearing input)
-    if (raw === '') {
-      setAskInput('');
-      return;
-    }
-
-    // Parse and clamp to valid range 0-5
+    if (raw === '') { setAskInput(''); return; }
     const parsed = parseInt(raw, 10);
-    if (!isNaN(parsed)) {
-      const clamped = Math.min(5, Math.max(0, parsed));
-      setAskInput(String(clamped));
-    }
+    if (!isNaN(parsed)) setAskInput(String(clampMaxLvls(parsed)));
   }, []);
+
+  const handleBidBlur = useCallback(() => setBidInput(String(parseMaxLvls(bidInput))), [bidInput]);
+  const handleAskBlur = useCallback(() => setAskInput(String(parseMaxLvls(askInput))), [askInput]);
+
+  const handleBidIncrement = useCallback(() => setBidInput((v) => String(clampMaxLvls(parseMaxLvls(v) + 1))), []);
+  const handleBidDecrement = useCallback(() => setBidInput((v) => String(clampMaxLvls(parseMaxLvls(v) - 1))), []);
+  const handleAskIncrement = useCallback(() => setAskInput((v) => String(clampMaxLvls(parseMaxLvls(v) + 1))), []);
+  const handleAskDecrement = useCallback(() => setAskInput((v) => String(clampMaxLvls(parseMaxLvls(v) - 1))), []);
 
   const handleApply = useCallback(() => {
     const bidVal = parseMaxLvls(bidInput);
@@ -98,96 +82,114 @@ export function BatchMaxLevelsPopover() {
     setOpen(false);
   }, [bidInput, askInput, batchUpdateMaxLvls]);
 
-  const handleCancel = useCallback(() => {
-    setOpen(false);
-  }, []);
+  const handleCancel = useCallback(() => setOpen(false), []);
 
   const canApply = affectedCount > 0;
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+    <Popover open={open} onOpenChange={setOpen}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
+          <PopoverTrigger asChild>
+            <DSCButton
               variant="outline"
               size="sm"
-              className="gap-1 shrink-0 px-3"
+              className="gap-1 shrink-0"
+              style={{ paddingLeft: '12px', paddingRight: '12px' }}
               aria-label="Set max levels for all streams"
             >
               <Layers className="h-4 w-4" />
               Batch Max Lvls
-            </Button>
-          </DropdownMenuTrigger>
+            </DSCButton>
+          </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent>Set max levels for all streams</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent
+
+      <PopoverContent
         align="end"
         sideOffset={6}
         collisionPadding={8}
+        onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
-        className={cn(
-          'min-w-[220px] p-4',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
-        )}
+        onClick={(e) => e.stopPropagation()}
+        style={{ padding: '8px' }}
+        className="w-[190px]"
       >
-        <div role="group" aria-label="Set Max Levels (Batch)" className="flex flex-col gap-4">
-          <h3 className="text-sm font-medium">Set Max Levels (Batch)</h3>
+        <div role="group" aria-label="Set MAX Levels (batch)" className="flex flex-col gap-[6px]">
 
-          <div className="flex flex-col gap-3">
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-medium text-muted-foreground">BID MAX Lvls</span>
-              <input
-                type="number"
-                min={0}
-                max={5}
+          {/* Title */}
+          <p className="text-[10px] font-semibold text-[#fafafa] leading-[10px]">
+            Set MAX Levels (batch)
+          </p>
+
+          {/* Rows */}
+          <div className="flex flex-col pt-[2px]">
+            {affectedCount > 0 && (
+              <p className="text-[9px] font-medium text-[#a1a1a1]" style={{ marginBottom: '10px' }}>
+                Apply to {affectedCount} stream{affectedCount !== 1 ? 's' : ''} (current view)
+              </p>
+            )}
+
+            {/* BID MAX */}
+            <div className="flex items-center gap-[4px]" style={{ paddingTop: '2px', paddingBottom: '6px' }}>
+              <span className="text-[9px] font-medium text-[#a1a1a1] w-[42px] shrink-0">BID MAX</span>
+              <StepperInput
                 value={bidInput}
                 onChange={handleBidChange}
-                onFocus={(e) => e.target.select()}
-                className={cn(
-                  'w-14 h-7 px-2 text-center text-[11px] tabular-nums rounded border border-border bg-background',
-                  'focus:outline-none focus:ring-1 focus:ring-ring'
-                )}
-                aria-label="BID MAX Lvls"
+                onBlur={handleBidBlur}
+                onFocus={(e) => e.currentTarget.select()}
+                onIncrement={handleBidIncrement}
+                onDecrement={handleBidDecrement}
+                incrementLabel="Increase BID MAX"
+                decrementLabel="Decrease BID MAX"
+                inputClassName="w-[80px]"
               />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-medium text-muted-foreground">ASK MAX Lvls</span>
-              <input
-                type="number"
-                min={0}
-                max={5}
+            </div>
+
+            {/* ASK MAX */}
+            <div className="flex items-center gap-[4px]" style={{ paddingTop: '2px', paddingBottom: '2px' }}>
+              <span className="text-[9px] font-medium text-[#a1a1a1] w-[42px] shrink-0">ASK MAX</span>
+              <StepperInput
                 value={askInput}
                 onChange={handleAskChange}
-                onFocus={(e) => e.target.select()}
-                className={cn(
-                  'w-14 h-7 px-2 text-center text-[11px] tabular-nums rounded border border-border bg-background',
-                  'focus:outline-none focus:ring-1 focus:ring-ring'
-                )}
-                aria-label="ASK MAX Lvls"
+                onBlur={handleAskBlur}
+                onFocus={(e) => e.currentTarget.select()}
+                onIncrement={handleAskIncrement}
+                onDecrement={handleAskDecrement}
+                incrementLabel="Increase ASK MAX"
+                decrementLabel="Decrease ASK MAX"
+                inputClassName="w-[80px]"
               />
-            </label>
+            </div>
           </div>
 
-          {affectedCount > 0 && (
-            <p className="text-[10px] text-muted-foreground">
-              Apply to {affectedCount} stream{affectedCount !== 1 ? 's' : ''} (current view)
-            </p>
-          )}
+          {/* Divider */}
+          <div className="h-px bg-[rgba(255,255,255,0.1)]" />
 
-          <div className="flex items-center gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={handleCancel}>
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-[4px]">
+            <DSCButton
+              size="xs"
+              variant="secondary"
+              onClick={handleCancel}
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
               Cancel
-            </Button>
-            <Button variant="default" size="sm" onClick={handleApply} disabled={!canApply}>
-              Apply Changes
-            </Button>
+            </DSCButton>
+            <DSCButton
+              size="xs"
+              variant="default"
+              onClick={handleApply}
+              disabled={!canApply}
+              style={{ paddingLeft: '8px', paddingRight: '8px' }}
+            >
+              Apply
+            </DSCButton>
           </div>
+
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 }
