@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem, PauseProgressState, PauseProgressItem } from '../types/streamSet';
+import type { StreamSet, SecurityType, UserPreferences, StreamState, StagingSnapshot, StreamQuoteFeed, LaunchProgressState, LaunchProgressItem, PauseProgressState, PauseProgressItem, PriceSource } from '../types/streamSet';
 import { generateInitialStreamSets, generateRandomDemoData, generateStreamQuoteFeeds, generateAdditiveDemoStreams, type DemoStreamType } from '../mocks/mockData';
 import { simulateLaunch, simulateStopStream, validateStreamSet } from '../mocks/mockValidations';
 import { stagingConfigEquals, getActiveLevelCount } from '../lib/utils';
@@ -1206,16 +1206,30 @@ export const useStreamStore = create<StreamStore>()(
         // Single atomic state update
         set((state) => {
           const streamIds = new Set(streams.map((s) => s.id));
+          const independentPriceSources = state.preferences.independentPriceSources;
           const nextStreamSets = state.streamSets.map((stream) => {
             // Only update streams in the current filtered view
             if (!streamIds.has(stream.id)) return stream;
+
+            // Whether this stream has per-side sources that would override selectedPriceSource
+            const hasPerSideSources = !!(stream.bidSelectedPriceSource || stream.askSelectedPriceSource);
 
             if (isManual) {
               // Manual: preserve current displayed values
               const currentFeed = stream.quoteFeeds?.find((f) => f.feedId === stream.selectedPriceSource);
               const currentBid = currentFeed?.bid ?? stream.referencePrice.manualBid ?? stream.referencePrice.value;
               const currentAsk = currentFeed?.ask ?? stream.referencePrice.manualAsk ?? stream.referencePrice.value;
-              
+
+              // When independentPriceSources is on (or per-side sources exist), also clear them
+              const perSideUpdate = (independentPriceSources || hasPerSideSources)
+                ? {
+                    bidSelectedPriceSource: 'manual',
+                    askSelectedPriceSource: 'manual',
+                    bidReferencePrice: { source: 'manual' as PriceSource, value: currentBid, manualBid: currentBid, timestamp, isOverride: false },
+                    askReferencePrice: { source: 'manual' as PriceSource, value: currentAsk, manualAsk: currentAsk, timestamp, isOverride: false },
+                  }
+                : {};
+
               return {
                 ...stream,
                 selectedPriceSource: 'manual',
@@ -1223,18 +1237,19 @@ export const useStreamStore = create<StreamStore>()(
                 quoteFeedName: undefined,
                 referencePrice: {
                   ...stream.referencePrice,
-                  source: 'manual',
+                  source: 'manual' as PriceSource,
                   value: stream.referencePrice.value || currentBid,
                   manualBid: currentBid,
                   manualAsk: currentAsk,
                 },
+                ...perSideUpdate,
                 hasStagingChanges: true,
-              };
+              } as StreamSet;
             } else {
               // QF selection: Find the selected feed in this stream's quoteFeeds
               let feed = stream.quoteFeeds?.find((f) => f.feedId === selectedPriceSource);
               let updatedQuoteFeeds = stream.quoteFeeds;
-              
+
               // If stream doesn't have this QF, add it from reference (ensures isPriceSourceValid passes)
               if (!feed && referenceFeed) {
                 // Clone the reference feed for this stream
@@ -1251,9 +1266,19 @@ export const useStreamStore = create<StreamStore>()(
                 };
                 updatedQuoteFeeds = [...(stream.quoteFeeds || []), feed];
               }
-              
+
               const bidValue = feed.bid ?? stream.referencePrice.value;
-              
+
+              // When independentPriceSources is on (or per-side sources exist), also sync both sides
+              const perSideUpdate = (independentPriceSources || hasPerSideSources)
+                ? {
+                    bidSelectedPriceSource: selectedPriceSource,
+                    askSelectedPriceSource: selectedPriceSource,
+                    bidReferencePrice: { source: 'live' as PriceSource, value: feed.bid ?? stream.referencePrice.value, timestamp, isOverride: false },
+                    askReferencePrice: { source: 'live' as PriceSource, value: feed.ask ?? stream.referencePrice.value, timestamp, isOverride: false },
+                  }
+                : {};
+
               return {
                 ...stream,
                 // Always use the user's exact selection
@@ -1263,12 +1288,13 @@ export const useStreamStore = create<StreamStore>()(
                 quoteFeeds: updatedQuoteFeeds,
                 referencePrice: {
                   ...stream.referencePrice,
-                  source: 'live',
+                  source: 'live' as PriceSource,
                   value: bidValue,
                   timestamp,
                 },
+                ...perSideUpdate,
                 hasStagingChanges: true,
-              };
+              } as StreamSet;
             }
           });
 
