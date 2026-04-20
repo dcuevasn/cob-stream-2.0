@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, ChevronDown, Columns, FlaskConical, EyeOff } from 'lucide-react';
+import { Loader2, Pause, Plus, Play, Minus, RefreshCw, MoreHorizontal, ChevronDown, Columns, FlaskConical, EyeOff, Activity, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../ui/button';
 import { AddSecurityDialog } from './AddSecurityDialog';
 import {
@@ -14,7 +14,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { SearchBar } from './SearchBar';
 import { BatchMaxLevelsPopover } from './BatchMaxLevelsPopover';
-import { BatchSizePopover } from './BatchSizePopover';
+import { BatchSpreadPopover } from './BatchSpreadPopover';
+import { BatchMoreActions } from './BatchMoreActions';
 import { LaunchProgressPopover } from './LaunchProgressPopover';
 import { PauseProgressPopover } from './PauseProgressPopover';
 import { useStreamStore } from '../../hooks/useStreamStore';
@@ -182,6 +183,10 @@ export function Toolbar() {
             <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
             Unconfigured Stream
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => generateDemoData('idle')}>
+            <FlaskConical className="h-4 w-4 mr-2 text-muted-foreground" />
+            Idle Stream (Levels Consumed)
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuCheckboxItem
             checked={preferences.hideIndividualLevelControls}
@@ -196,6 +201,20 @@ export function Toolbar() {
           >
             <Columns className="h-4 w-4 mr-2 text-muted-foreground" />
             Independent price sources per side
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={preferences.applyChangesProgress}
+            onCheckedChange={(checked) => setPreferences({ applyChangesProgress: checked })}
+          >
+            <Activity className="h-4 w-4 mr-2 text-muted-foreground" />
+            Apply changes progress popover
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={preferences.sliderSpreadPopover}
+            onCheckedChange={(checked) => setPreferences({ sliderSpreadPopover: checked })}
+          >
+            <SlidersHorizontal className="h-4 w-4 mr-2 text-muted-foreground" />
+            Slider spread popover per side
           </DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -305,7 +324,8 @@ export function Toolbar() {
   const secondaryActions = (
     <>
       <BatchMaxLevelsPopover />
-      <BatchSizePopover />
+      <BatchSpreadPopover />
+      <BatchMoreActions />
       <div className="h-6 w-px bg-border shrink-0" />
       <UserSettings />
     </>

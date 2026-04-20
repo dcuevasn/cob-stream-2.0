@@ -7,16 +7,24 @@ import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
 import { Button } from '../ui/button';
-import { Button as DSCButton } from '../dsc/button';
-import { Popover, PopoverTrigger, PopoverContent } from '../dsc/popover';
 import { StepperInput } from '../dsc/stepper-input';
-import { Checkbox } from '../dsc/checkbox';
 import { PriceSourceCombobox, type MixedSourceState } from './PriceSourceCombobox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Badge } from '../ui/badge';
 import { SidedStatusBadge } from '../StateIndicators/StatusBadge';
 import { ValidationBanner } from '../StateIndicators/ValidationBanner';
 import { SpreadStepSettings } from './SpreadStepSettings';
+import { BatchMaxLevelsPopover } from '../GlobalControls/BatchMaxLevelsPopover';
+import { BatchSizePopover } from '../GlobalControls/BatchSizePopover';
+import { BatchSpreadPopover } from '../GlobalControls/BatchSpreadPopover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { cn, formatNumber, formatQuantity, formatQuantityFull, isUdiSecurity, getVolumeLabel, getNotionalToggleLabel } from '../../lib/utils';
 import { ACTIONS_COLUMN_WIDTH, useTableGridStyle } from './StreamTableHeader';
 import { useSettingsStore } from '../../hooks/useSettingsStore';
@@ -397,164 +405,6 @@ function IndependentPriceSourcesPanel({
   );
 }
 
-const MIN_QUANTITY = 1;
-const MAX_QUANTITY = 50_000_000;
-
-/** Column header with chevron that opens batch qty/notional popover */
-function BatchQtyHeader({
-  volumeLabel,
-  side,
-  stream,
-  onBatchApply,
-}: {
-  volumeLabel: string;
-  side: 'bid' | 'ask';
-  stream: StreamSet;
-  onBatchApply: (side: 'bid' | 'ask', quantity: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const oppositeSide = side === 'bid' ? 'ask' : 'bid';
-  const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
-  const oppositeMatrix = side === 'bid' ? stream.ask.spreadMatrix : stream.bid.spreadMatrix;
-  const currentQty = matrix[0]?.quantity ?? 1000;
-  const [inputValue, setInputValue] = useState(currentQty.toString());
-  const [applyToBoth, setApplyToBoth] = useState(false);
-  const inputLabel = volumeLabel === 'QTY' ? 'QTY' : isUdiSecurity(stream.securityType) ? 'UDI' : 'MXN';
-
-  useEffect(() => {
-    if (open) {
-      setInputValue(currentQty.toString());
-      setApplyToBoth(false);
-    }
-  }, [open, currentQty]);
-
-  const parsed = parseInt(inputValue.replace(/[^0-9]/g, ''), 10);
-  const isValid = !isNaN(parsed) && parsed >= MIN_QUANTITY && parsed <= MAX_QUANTITY;
-  const wouldChangeSide = matrix.some((l) => l.quantity !== parsed);
-  const wouldChangeOppSide = oppositeMatrix.some((l) => l.quantity !== parsed);
-  const wouldChange = applyToBoth ? wouldChangeSide || wouldChangeOppSide : wouldChangeSide;
-  const canApply = isValid && wouldChange;
-
-  const handleApply = () => {
-    if (!canApply) return;
-    onBatchApply(side, parsed);
-    if (applyToBoth) onBatchApply(oppositeSide, parsed);
-    setOpen(false);
-  };
-
-  const handleCancel = () => setOpen(false);
-
-  const handleIncrement = () => {
-    const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10) || 0;
-    setInputValue(String(Math.min(MAX_QUANTITY, v + 1_000)));
-  };
-  const handleDecrement = () => {
-    const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10) || 0;
-    setInputValue(String(Math.max(MIN_QUANTITY, v - 1_000)));
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            'flex items-center gap-0.5 w-full text-left py-1 px-1 text-muted-foreground font-medium text-[11px]',
-            'hover:text-foreground hover:bg-muted/50 rounded transition-colors',
-            'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
-          )}
-          aria-label={`Set ${volumeLabel} for all levels`}
-        >
-          {volumeLabel}
-          <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        collisionPadding={8}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
-        style={{ padding: '8px' }}
-        className="w-[190px]"
-      >
-        <div role="group" aria-label={`Set ${volumeLabel} (All Levels)`} className="flex flex-col gap-[6px]">
-
-          {/* Title */}
-          <p className="text-[10px] font-semibold text-[#fafafa] leading-[10px]">
-            Set {volumeLabel} (All Levels)
-          </p>
-
-          {/* QTY row */}
-          <div className="flex flex-col" style={{ paddingTop: '4px' }}>
-            <div className="flex items-center gap-[4px]" style={{ paddingBottom: '8px' }}>
-              <span className="text-[9px] font-medium text-[#a1a1a1] w-[28px] shrink-0">{inputLabel}</span>
-              <StepperInput
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={() => {
-                  const v = parseInt(inputValue.replace(/[^0-9]/g, ''), 10);
-                  if (!isNaN(v)) setInputValue(String(Math.min(MAX_QUANTITY, Math.max(MIN_QUANTITY, v))));
-                }}
-                onFocus={(e) => e.currentTarget.select()}
-                onIncrement={handleIncrement}
-                onDecrement={handleDecrement}
-                incrementLabel="Increase by 1,000"
-                decrementLabel="Decrease by 1,000"
-                inputClassName="w-[80px]"
-              />
-            </div>
-
-            {/* Checkbox */}
-            <div
-              className="flex items-center gap-[6px]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Checkbox
-                id={`apply-both-${side}`}
-                checked={applyToBoth}
-                onCheckedChange={(checked) => setApplyToBoth(checked === true)}
-              />
-              <label
-                htmlFor={`apply-both-${side}`}
-                className="text-[11px] text-[#a1a1a1] cursor-pointer select-none leading-none"
-              >
-                Also apply to {oppositeSide.toUpperCase()} side
-              </label>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-[rgba(255,255,255,0.1)]" />
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-[4px]">
-            <DSCButton
-              size="xs"
-              variant="secondary"
-              onClick={handleCancel}
-              style={{ paddingLeft: '8px', paddingRight: '8px' }}
-            >
-              Cancel
-            </DSCButton>
-            <DSCButton
-              size="xs"
-              variant="default"
-              onClick={handleApply}
-              disabled={!canApply}
-              style={{ paddingLeft: '8px', paddingRight: '8px' }}
-            >
-              Apply
-            </DSCButton>
-          </div>
-
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 /** Max levels stepper — wraps DSC StepperInput with local string state, min 0 max 5 */
 function MaxLvlsInput({
@@ -604,188 +454,6 @@ function formatSpreadBps(value: number): string {
   return str || '0';
 }
 
-/** Column header with chevron that opens batch spread adjustment popover */
-function BatchSpreadHeader({
-  side,
-  stream,
-  onBatchAdjust,
-  onResetToDefault,
-}: {
-  side: 'bid' | 'ask';
-  stream: StreamSet;
-  onBatchAdjust: (side: 'bid' | 'ask', baseSpreads: number[], adjustmentBps: number) => void;
-  onResetToDefault: (side: 'bid' | 'ask') => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const matrix = side === 'bid' ? stream.bid.spreadMatrix : stream.ask.spreadMatrix;
-  const [baseSpreads, setBaseSpreads] = useState<number[]>([]);
-  const [adjustmentValue, setAdjustmentValue] = useState(0);
-  const [inputStr, setInputStr] = useState('0');
-  const { stepSize } = useSpreadStepSize();
-  const { defaultSpreads } = useDefaultSpreads();
-
-  useEffect(() => {
-    if (open) {
-      setBaseSpreads(matrix.map((l) => l.deltaBps));
-      setAdjustmentValue(0);
-      setInputStr('0');
-    }
-    // Only reset when popover opens. Do NOT depend on matrix - applying an adjustment
-    // updates the stream → matrix changes → would reset input to 0 and break +/- buttons.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const getBase = () => (baseSpreads.length > 0 ? baseSpreads : matrix.map((l) => l.deltaBps));
-
-  const applyAdjustment = useCallback(
-    (adj: number) => {
-      const rounded = roundBps(adj);
-      setAdjustmentValue(rounded);
-      setInputStr(rounded === 0 ? '0' : formatSpreadBps(rounded));
-      const base = getBase();
-      if (base.length > 0) {
-        onBatchAdjust(side, base, rounded);
-      }
-    },
-    [side, baseSpreads, matrix, onBatchAdjust]
-  );
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    // Allow: empty, minus sign alone, decimal point sequences, and valid numbers up to 3 decimals
-    if (raw !== '' && raw !== '-' && raw !== '.' && raw !== '-.' && !/^-?\d*\.?\d{0,3}$/.test(raw)) return;
-    setInputStr(raw === '' ? '0' : raw);
-    // Don't apply adjustment for incomplete input (just minus or decimal point)
-    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
-      return;
-    }
-    const n = parseFloat(raw);
-    if (!isNaN(n)) {
-      const rounded = roundBps(n);
-      setAdjustmentValue(rounded);
-      const base = getBase();
-      if (base.length > 0) {
-        onBatchAdjust(side, base, rounded);
-      }
-    }
-  };
-
-  const handlePlus = () => {
-    const newVal = roundBps(adjustmentValue + stepSize);
-    applyAdjustment(newVal);
-  };
-
-  const handleMinus = () => {
-    const newVal = roundBps(adjustmentValue - stepSize);
-    applyAdjustment(newVal);
-  };
-
-  const handleBlur = () => {
-    const n = parseFloat(inputStr);
-    const rounded = !isNaN(n) ? roundBps(n) : 0;
-    setAdjustmentValue(rounded);
-    setInputStr(rounded === 0 ? '0' : formatSpreadBps(rounded));
-    if (rounded !== adjustmentValue) {
-      const base = getBase();
-      if (base.length > 0) {
-        onBatchAdjust(side, base, rounded);
-      }
-    }
-  };
-
-  const handleResetToDefault = () => {
-    const defaults = side === 'ask'
-      ? defaultSpreads.ask
-      : defaultSpreads.bid;
-    setBaseSpreads(defaults);
-    setAdjustmentValue(0);
-    setInputStr('0');
-    onResetToDefault(side);
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            'flex items-center gap-0.5 w-full text-left py-1 px-1 text-muted-foreground font-medium text-[11px]',
-            'hover:text-foreground hover:bg-muted/50 rounded transition-colors',
-            'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
-          )}
-          aria-label="Adjust spread for all levels"
-        >
-          Spread
-          <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        side="top"
-        collisionPadding={8}
-        avoidCollisions
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
-        style={{ padding: '8px' }}
-        className="w-[165px] text-[10px] leading-tight shadow-sm"
-      >
-        <div role="group" aria-label="Adjust Spread (All Levels)" className="flex flex-col gap-1.5">
-          {/* Title */}
-          <p className="text-[10px] font-semibold text-[#fafafa] leading-none pb-0.5">
-            Adjust Spread (All Levels)
-          </p>
-
-          {/* BPS · Stepper · Settings */}
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0 leading-none">BPS</span>
-              <StepperInput
-                value={inputStr}
-                onChange={handleInputChange}
-                onBlur={handleBlur}
-                onFocus={(e) => e.currentTarget.select()}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                onIncrement={() => handlePlus()}
-                onDecrement={() => handleMinus()}
-                incrementLabel={`Increase by ${stepSize} bps`}
-                decrementLabel={`Decrease by ${stepSize} bps`}
-              />
-            </div>
-            <SpreadStepSettings />
-          </div>
-
-          {/* Divider */}
-          <div className="-mx-2 h-px bg-white/10" />
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-1">
-            <DSCButton
-              size="xs"
-              variant="secondary"
-              onClick={(e) => { e.stopPropagation(); handleResetToDefault(); }}
-              className="whitespace-nowrap"
-              aria-label="Reset to default spread"
-              style={{ paddingLeft: '8px', paddingRight: '8px' }}
-            >
-              Default SPRD.
-            </DSCButton>
-            <DSCButton
-              size="xs"
-              variant="secondary"
-              onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-              aria-label="Close"
-              style={{ paddingLeft: '8px', paddingRight: '8px' }}
-            >
-              Cancel
-            </DSCButton>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 /** Compact inline-editable cell: select on focus, Tab/Enter to commit */
 function LevelCellInput({
@@ -869,6 +537,7 @@ function ExpandedLevelsTable({
   independentPriceSources,
 }: ExpandedLevelsTableProps) {
   const { defaultSpreads } = useDefaultSpreads();
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
 
   const updateBidLevel = useCallback(
     (levelIndex: number, updates: Partial<Level>) => {
@@ -950,6 +619,7 @@ function ExpandedLevelsTable({
   const hasYieldCrossing = bidYield1 !== null && askYield1 !== null && askYield1 > bidYield1;
 
   return (
+    <>
     <div
       className={cn(
         'pt-0',
@@ -1045,6 +715,11 @@ function ExpandedLevelsTable({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-auto flex-wrap justify-end">
+          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <BatchMaxLevelsPopover streamId={stream.id} />
+            <BatchSizePopover streamId={stream.id} />
+            <BatchSpreadPopover streamId={stream.id} />
+          </div>
           <div
             role="tablist"
             aria-label="Volume unit"
@@ -1103,7 +778,7 @@ function ExpandedLevelsTable({
                 size="icon-sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  deleteStreamSet(stream.id);
+                  setConfirmRemoveOpen(true);
                 }}
                 disabled={hasAnyActiveLevel}
                 className="h-6 w-6 shrink-0 min-w-[24px] text-muted-foreground hover:bg-destructive hover:text-destructive-foreground disabled:hover:bg-transparent"
@@ -1128,13 +803,19 @@ function ExpandedLevelsTable({
                 Bid Levels ({bidActiveCount})
               </span>
               <div className="flex items-center gap-0.5">
-                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-1.5 shrink-0 mr-3">
                   <span className="text-[10px] text-muted-foreground">MAX</span>
-                  <MaxLvlsInput
-                    value={stream.bid.maxLvls ?? 1}
-                    onChange={(v) => updateStreamSet(stream.id, { bid: { ...stream.bid, maxLvls: v } })}
-                    isStaged={!!(stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1))}
-                  />
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold tabular-nums',
+                      !!(stream.lastLaunchedSnapshot && (stream.bid.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.bid.maxLvls ?? 1))
+                        ? 'text-blue-400 bg-blue-500/10 ring-1 ring-inset ring-blue-500/30 rounded-[0.2rem]'
+                        : 'text-[#fafafa]'
+                    )}
+                    aria-label={`Bid max levels: ${stream.bid.maxLvls ?? 1}`}
+                  >
+                    {stream.bid.maxLvls ?? 1}
+                  </span>
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1184,12 +865,8 @@ function ExpandedLevelsTable({
               <table className="w-full text-[11px] tabular-nums border-collapse border-spacing-0 min-w-[200px]">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border/50">
-                    <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                      <BatchQtyHeader volumeLabel={volumeLabel} side="bid" stream={stream} onBatchApply={batchUpdateQty} />
-                    </th>
-                    <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                      <BatchSpreadHeader side="bid" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
-                    </th>
+                    <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">{volumeLabel}</th>
+                    <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Spread</th>
                     <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
                     <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                     {!hideIndividualLevelControls && (
@@ -1269,12 +946,18 @@ function ExpandedLevelsTable({
                   </TooltipTrigger>
                   <TooltipContent>Stop all ask levels</TooltipContent>
                 </Tooltip>
-                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <MaxLvlsInput
-                    value={stream.ask.maxLvls ?? 1}
-                    onChange={(v) => updateStreamSet(stream.id, { ask: { ...stream.ask, maxLvls: v } })}
-                    isStaged={!!(stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1))}
-                  />
+                <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold tabular-nums',
+                      !!(stream.lastLaunchedSnapshot && (stream.ask.maxLvls ?? 1) !== (stream.lastLaunchedSnapshot.ask.maxLvls ?? 1))
+                        ? 'text-blue-400 bg-blue-500/10 ring-1 ring-inset ring-blue-500/30 rounded-[0.2rem]'
+                        : 'text-[#fafafa]'
+                    )}
+                    aria-label={`Ask max levels: ${stream.ask.maxLvls ?? 1}`}
+                  >
+                    {stream.ask.maxLvls ?? 1}
+                  </span>
                   <span className="text-[10px] text-muted-foreground">MAX</span>
                 </div>
               </div>
@@ -1292,12 +975,8 @@ function ExpandedLevelsTable({
                   )}
                   <th className="text-center py-1 px-1 text-muted-foreground font-medium w-6 whitespace-nowrap">L</th>
                   <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Yield</th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                    <BatchSpreadHeader side="ask" stream={stream} onBatchAdjust={batchUpdateSpread} onResetToDefault={batchResetToDefaultSpread} />
-                  </th>
-                  <th className="text-left py-0 px-0 text-muted-foreground font-medium whitespace-nowrap">
-                    <BatchQtyHeader volumeLabel={volumeLabel} side="ask" stream={stream} onBatchApply={batchUpdateQty} />
-                  </th>
+                  <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">Spread</th>
+                  <th className="text-left py-1 px-1 text-muted-foreground font-medium whitespace-nowrap">{volumeLabel}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1327,6 +1006,49 @@ function ExpandedLevelsTable({
       </div>
       </div>
     </div>
+
+    {/* Destructive confirmation before removing the stream from the view */}
+    <Dialog open={confirmRemoveOpen} onOpenChange={setConfirmRemoveOpen}>
+      <DialogContent
+        className="max-w-[400px] sm:max-w-[400px] duration-100"
+        style={{ padding: '22px', gap: '16px' }}
+      >
+        <div className="flex items-center gap-2.5" style={{ paddingRight: '20px' }}>
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <DialogTitle className="text-sm font-semibold">Remove stream?</DialogTitle>
+        </div>
+        <DialogDescription className="text-sm leading-relaxed">
+          You are about to remove{' '}
+          <span className="font-semibold text-foreground">{stream.securityAlias || stream.securityName}</span>
+          {stream.securityType && <> (<span className="text-foreground">{stream.securityType}</span>)</>} from your view.
+          Staged changes will be lost. This action cannot be undone.
+        </DialogDescription>
+        <DialogFooter className="gap-2" style={{ paddingTop: '4px' }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmRemoveOpen(false)}
+            style={{ height: '32px', paddingLeft: '18px', paddingRight: '18px' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              deleteStreamSet(stream.id);
+              setConfirmRemoveOpen(false);
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            style={{ height: '32px', paddingLeft: '18px', paddingRight: '18px' }}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            Remove stream
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -1603,7 +1325,7 @@ export function StreamRow({ stream }: StreamRowProps) {
     selectedStreamId,
     selectStream,
     launchStream,
-    applyChanges,
+    applyChangesWithProgress: applyChanges,
     launchLevel,
     pauseLevel,
     launchAllLevels,
@@ -1874,7 +1596,7 @@ export function StreamRow({ stream }: StreamRowProps) {
         isSelected && 'stream-set-selected',
         isExpanded && 'expanded-row-bg',
         stream.state === 'staging' && 'staging-bg',
-        stream.state === 'paused' && 'paused-bg',
+        (stream.state === 'paused' || (stream.state === 'active' && !hasAnyActiveLevel)) && 'paused-bg',
         stream.state === 'halted' && 'halted-bg'
       )}
       tabIndex={isSelected ? 0 : -1}
@@ -1916,6 +1638,8 @@ export function StreamRow({ stream }: StreamRowProps) {
                 haltDetails={stream.haltDetails}
                 bidActiveCount={bidActiveCount}
                 askActiveCount={askActiveCount}
+                bidSideActive={stream.bid.isActive}
+                askSideActive={stream.ask.isActive}
                 isLoading={isStreamProcessing}
               />
           </div>
@@ -2190,6 +1914,18 @@ export function StreamRow({ stream }: StreamRowProps) {
           )}
         </div>
       </div>
+
+      {/* Idle/Listening Banner — active stream with all levels consumed */}
+      {stream.state === 'active' && !hasAnyActiveLevel && (stream.bid.isActive || stream.ask.isActive) && (
+        <div className="pb-2">
+          <div className="flex items-center gap-2 px-[8px] py-2 text-[11px] text-[#a1a1a1] bg-[hsl(0_0%_50%/0.1)]">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1 min-w-0 truncate">
+              All levels consumed — awaiting price change for auto-relaunch or manual action
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Missing Price Source Alert Banner */}
       {hasMissingPriceSourceError && (

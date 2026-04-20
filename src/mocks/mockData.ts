@@ -297,7 +297,7 @@ function createStagingSnapshot(stream: StreamSet): StagingSnapshot {
   };
 }
 
-export type DemoStreamType = 'new_stream' | 'yield_crossing' | 'ffch_bid' | 'ffch_ask' | 'staged' | 'unconfigured';
+export type DemoStreamType = 'new_stream' | 'yield_crossing' | 'ffch_bid' | 'ffch_ask' | 'staged' | 'unconfigured' | 'idle';
 
 // Generate additive demo streams that are appended to existing streams
 // Each stream has exactly 1 active level on BID and 1 on ASK (except when type specifies otherwise)
@@ -369,6 +369,72 @@ export function generateAdditiveDemoStreams(
           })),
           state: 'unconfigured',
         },
+      };
+    }
+
+    // Idle/listening: stream is active but all levels consumed (no active levels).
+    // Side isActive flags remain true — the stream is listening for price changes.
+    if (type === 'idle') {
+      const idleQuoteFeeds = generateStreamQuoteFeeds(sec.referenceYield);
+      const idleFeed = idleQuoteFeeds[Math.floor(Math.random() * idleQuoteFeeds.length)];
+      const qtyOpts = [500, 1000, 2000, 5000, 10000, 25000];
+      const bidQtyI = qtyOpts[Math.floor(Math.random() * qtyOpts.length)];
+      const askQtyI = qtyOpts[Math.floor(Math.random() * qtyOpts.length)];
+      const bidBaseI = (Math.floor(Math.random() * 10) + 1) * 0.5;
+      const askBaseI = -(Math.floor(Math.random() * 10) + 1) * 0.5;
+
+      const idleStream: StreamSet = {
+        id: `ss-demo-${Date.now()}-${i}-${sec.alias}`,
+        securityId: `sec-demo-${Date.now()}-${i}`,
+        securityName: sec.name,
+        securityAlias: sec.alias,
+        securityISIN: sec.isin,
+        securityType: sec.type,
+        maturityDate: sec.maturity,
+        couponRate: sec.couponRate,
+        state: 'active',
+        levels: 5,
+        priceMode: 'quantity',
+        quoteFeedId: idleFeed.feedId,
+        quoteFeedName: idleFeed.feedName,
+        quoteFeeds: idleQuoteFeeds,
+        selectedPriceSource: idleFeed.feedId,
+        referencePrice: {
+          source: 'live' as const,
+          value: idleFeed.bid,
+          timestamp: new Date().toISOString(),
+          isOverride: false,
+        },
+        bid: {
+          isActive: true,
+          levelsToLaunch: 1,
+          maxLvls: 1,
+          spreadMatrix: Array.from({ length: 5 }, (_, lvl) => ({
+            levelNumber: lvl + 1,
+            deltaBps: bidBaseI + lvl * 0.5,
+            quantity: bidQtyI,
+            isActive: false, // All levels consumed
+          })),
+          state: 'active',
+        },
+        ask: {
+          isActive: true,
+          levelsToLaunch: 1,
+          maxLvls: 1,
+          spreadMatrix: Array.from({ length: 5 }, (_, lvl) => ({
+            levelNumber: lvl + 1,
+            deltaBps: askBaseI - lvl * 0.5,
+            quantity: askQtyI,
+            isActive: false, // All levels consumed
+          })),
+          state: 'active',
+        },
+      };
+
+      return {
+        ...idleStream,
+        hasStagingChanges: false,
+        lastLaunchedSnapshot: createStagingSnapshot(idleStream),
       };
     }
 

@@ -115,6 +115,13 @@ export interface UserPreferences {
   toastNotificationsEnabled: boolean;
   hideIndividualLevelControls: boolean;
   independentPriceSources: boolean;
+  batchMaxLvlsMirror: boolean;
+  batchSizeMirror: boolean;
+  batchSizeBid: number;
+  batchSizeAsk: number;
+  batchSpreadMirror: boolean;
+  applyChangesProgress: boolean;
+  sliderSpreadPopover: boolean;
 }
 
 export interface ValidationResult {

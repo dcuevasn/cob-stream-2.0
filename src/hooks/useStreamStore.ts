@@ -45,6 +45,7 @@ interface StreamStore {
   // Stream operations
   launchStream: (id: string) => Promise<void>;
   applyChanges: (id: string) => Promise<void>;
+  applyChangesWithProgress: (id: string) => Promise<void>;
   stopStream: (id: string) => Promise<void>;
   pauseStream: (id: string) => void;
   resumeStream: (id: string) => void;
@@ -61,7 +62,7 @@ interface StreamStore {
   configureStream: (id: string, config: Partial<StreamSet>) => void;
 
   // Batch operations
-  batchUpdatePriceSource: (selectedPriceSource: string, securityType?: SecurityType) => void;
+  batchUpdatePriceSource: (selectedPriceSource: string, securityType?: SecurityType, streamId?: string) => void;
   batchUpdatePriceMode: (priceMode: 'quantity' | 'notional', securityType?: SecurityType) => void;
   batchUpdateMaxLvls: (bidMaxLvls: number, askMaxLvls: number) => void;
   batchUpdateQty: (bidQty: number, askQty: number) => void;
@@ -106,6 +107,7 @@ interface StreamStore {
 
 const REVERT_DEBOUNCE_MS = 300;
 const revertDebounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+let batchRevertTimer: ReturnType<typeof setTimeout>;
 
 /** Canonical predicate: stream is in staging (shows Staging badge, can be reverted/relaunched). */
 function isStreamStaging(stream: StreamSet): boolean {
@@ -210,6 +212,36 @@ function checkStagingRevert(id: string) {
   }
 }
 
+/** Batch version of checkStagingRevert — evaluates multiple streams and applies a single set(). */
+function batchCheckStagingRevert(ids: string[]) {
+  const { streamSets } = useStreamStore.getState();
+  const idsToRevert: Set<string> = new Set();
+  for (const id of ids) {
+    const stream = streamSets.find((ss) => ss.id === id);
+    if (!stream?.hasStagingChanges) continue;
+    if (!stream.lastLaunchedSnapshot) {
+      if (stream.selectedPriceSource === 'manual') {
+        const hasValidManualPrice =
+          (stream.referencePrice.manualBid != null && stream.referencePrice.manualBid !== 0) ||
+          (stream.referencePrice.manualAsk != null && stream.referencePrice.manualAsk !== 0);
+        if (!hasValidManualPrice) idsToRevert.add(id);
+      } else {
+        idsToRevert.add(id);
+      }
+      continue;
+    }
+    if (stagingConfigEquals(stream, stream.lastLaunchedSnapshot)) {
+      idsToRevert.add(id);
+    }
+  }
+  if (idsToRevert.size === 0) return;
+  useStreamStore.setState((state) => ({
+    streamSets: state.streamSets.map((ss) =>
+      idsToRevert.has(ss.id) ? { ...ss, hasStagingChanges: false } : ss
+    ),
+  }));
+}
+
 /** Auto-clear manualPriceErrors when the user enters a valid manual price for the errored side. */
 function checkManualPriceErrors(id: string) {
   const { streamSets, manualPriceErrors } = useStreamStore.getState();
@@ -268,6 +300,13 @@ const defaultPreferences: UserPreferences = {
   toastNotificationsEnabled: true,
   hideIndividualLevelControls: false,
   independentPriceSources: false,
+  batchMaxLvlsMirror: true,
+  batchSizeMirror: true,
+  batchSizeBid: 1000,
+  batchSizeAsk: 1000,
+  batchSpreadMirror: true,
+  applyChangesProgress: false,
+  sliderSpreadPopover: false,
 };
 
 export const useStreamStore = create<StreamStore>()(
@@ -462,18 +501,18 @@ export const useStreamStore = create<StreamStore>()(
           launchingStreamIds: new Set(s.launchingStreamIds).add(streamId),
         }));
 
-        // Relaunch: active side with MAX > 0 → apply config and reactivate levels
-        if (isBidActive && bidMaxLvls > 0) await launchAllLevels(streamId, 'bid');
-        if (isAskActive && askMaxLvls > 0) await launchAllLevels(streamId, 'ask');
+        // Launch/relaunch: any side with MAX > 0 → apply config and activate levels
+        if (bidMaxLvls > 0) await launchAllLevels(streamId, 'bid');
+        if (askMaxLvls > 0) await launchAllLevels(streamId, 'ask');
 
         // Stop: active side with MAX = 0 → stop all levels, then fall through to snapshot update
         if (isBidActive && bidMaxLvls === 0) await pauseAllLevels(streamId, 'bid');
         if (isAskActive && askMaxLvls === 0) await pauseAllLevels(streamId, 'ask');
 
-        // For sides that were NOT relaunched (already stopped, or just stopped via MAX=0):
+        // For sides that were NOT launched (MAX=0):
         // commit current config as new snapshot without launching
-        const bidWasRelaunched = isBidActive && bidMaxLvls > 0;
-        const askWasRelaunched = isAskActive && askMaxLvls > 0;
+        const bidWasRelaunched = bidMaxLvls > 0;
+        const askWasRelaunched = askMaxLvls > 0;
         if (!bidWasRelaunched || !askWasRelaunched) {
           const updatedStream = get().streamSets.find((ss) => ss.id === streamId);
           if (updatedStream) {
@@ -501,6 +540,70 @@ export const useStreamStore = create<StreamStore>()(
           next.delete(streamId);
           return { launchingStreamIds: next };
         });
+      },
+
+      applyChangesWithProgress: async (streamId) => {
+        const { streamSets, applyChanges, preferences } = get();
+        const stream = streamSets.find((ss) => ss.id === streamId);
+        if (!stream) return;
+
+        if (!preferences.applyChangesProgress) {
+          await applyChanges(streamId);
+          return;
+        }
+
+        const progressItem: LaunchProgressItem = {
+          streamId: stream.id,
+          streamName: stream.securityAlias || stream.securityName,
+          status: 'processing',
+          startTime: Date.now(),
+          bidCount: stream.bid.maxLvls ?? 1,
+          askCount: stream.ask.maxLvls ?? 1,
+          securityType: stream.securityType,
+        };
+
+        set({
+          launchProgress: {
+            isActive: true,
+            items: [progressItem],
+            completedCount: 0,
+            totalCount: 1,
+            variant: 'all',
+            startTime: Date.now(),
+          },
+          launchingStreamIds: new Set([streamId]),
+        });
+
+        try {
+          await applyChanges(streamId);
+          set((s) => ({
+            launchingStreamIds: new Set(),
+            launchProgress: s.launchProgress ? {
+              ...s.launchProgress,
+              isActive: false,
+              completedCount: 1,
+              items: s.launchProgress.items.map((item) =>
+                item.streamId === streamId
+                  ? { ...item, status: 'success' as const, endTime: Date.now() }
+                  : item
+              ),
+            } : null,
+          }));
+        } catch {
+          set((s) => ({
+            launchingStreamIds: new Set(),
+            launchProgress: s.launchProgress ? {
+              ...s.launchProgress,
+              isActive: false,
+              completedCount: 1,
+              items: s.launchProgress.items.map((item) =>
+                item.streamId === streamId
+                  ? { ...item, status: 'error' as const, error: 'Apply failed', endTime: Date.now() }
+                  : item
+              ),
+            } : null,
+          }));
+        }
       },
 
       stopStream: async (id) => {
@@ -1168,14 +1271,32 @@ export const useStreamStore = create<StreamStore>()(
        * IMPORTANT: Always assigns the EXACT selected price source to ALL streams - no fallback logic.
        * This ensures consistent batch updates where all streams get the same selection.
        * If a stream doesn't have the selected QF in quoteFeeds, it's added to ensure validity. */
-      batchUpdatePriceSource: (selectedPriceSource, securityType) => {
+      batchUpdatePriceSource: (selectedPriceSource, securityType, streamId) => {
         const { getFilteredStreamSets } = get();
         let streams = getFilteredStreamSets();
-        
+
+        // When streamId is provided, scope to a single stream (per-stream popover)
+        if (streamId) {
+          streams = streams.filter((s) => s.id === streamId);
+          // If the target stream isn't in the filtered view (rare), look it up directly
+          if (streams.length === 0) {
+            const direct = get().streamSets.find((s) => s.id === streamId);
+            if (direct) streams = [direct];
+          }
+        }
+
         // When securityType is provided (in All view sections), filter to just that type
         if (securityType) {
           streams = streams.filter((s) => s.securityType === securityType);
         }
+
+        // Skip streams whose snapshot already matches — avoids transient staging flash
+        streams = streams.filter((s) => {
+          const snapSource = s.lastLaunchedSnapshot?.selectedPriceSource ?? s.selectedPriceSource;
+          return snapSource !== selectedPriceSource;
+        });
+
+        if (streams.length === 0) return;
         
         const isManual = selectedPriceSource === 'manual';
         const timestamp = new Date().toISOString();
@@ -1307,13 +1428,17 @@ export const useStreamStore = create<StreamStore>()(
       batchUpdatePriceMode: (priceMode, securityType) => {
         const { getFilteredStreamSets, updateStreamSet } = get();
         let streams = getFilteredStreamSets();
-        
+
         // When securityType is provided (in All view sections), filter to just that type
         if (securityType) {
           streams = streams.filter((s) => s.securityType === securityType);
         }
-        
+
         streams.forEach((stream) => {
+          // Skip streams whose snapshot already matches — avoids a transient staging
+          // flash that would be auto-reverted on the next debounce tick.
+          const snapMode = stream.lastLaunchedSnapshot?.priceMode ?? stream.priceMode;
+          if (priceMode === snapMode) return;
           updateStreamSet(stream.id, { priceMode });
         });
       },
@@ -1475,13 +1600,97 @@ export const useStreamStore = create<StreamStore>()(
 
       /** Apply staged changes for all staged streams in current view. */
       batchApplyChanges: async () => {
-        const { getFilteredStreamSets, applyChanges } = get();
+        const { getFilteredStreamSets, applyChanges, preferences } = get();
         const stagedStreams = getFilteredStreamSets().filter((s) => s.hasStagingChanges);
+        if (stagedStreams.length === 0) return;
+
+        // When progress popover is enabled, show staggered progress like Launch All
+        if (preferences.applyChangesProgress) {
+          const progressItems: LaunchProgressItem[] = stagedStreams.map((s) => ({
+            streamId: s.id,
+            streamName: s.securityAlias || s.securityName,
+            status: 'pending' as const,
+            bidCount: s.bid.maxLvls ?? 1,
+            askCount: s.ask.maxLvls ?? 1,
+            securityType: s.securityType,
+          }));
+
+          set({
+            launchProgress: {
+              isActive: true,
+              items: progressItems,
+              completedCount: 0,
+              totalCount: stagedStreams.length,
+              variant: 'all',
+              startTime: Date.now(),
+            },
+            launchingStreamIds: new Set(stagedStreams.map((s) => s.id)),
+          });
+
+          const BATCH_SIZE = 2;
+          const STAGGER_DELAY = 150;
+
+          for (let i = 0; i < stagedStreams.length; i += BATCH_SIZE) {
+            const batch = stagedStreams.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(async (stream, batchIndex) => {
+              await new Promise((resolve) => setTimeout(resolve, batchIndex * STAGGER_DELAY));
+
+              // Mark as processing
+              set((s) => {
+                if (!s.launchProgress) return s;
+                const items = s.launchProgress.items.map((item) =>
+                  item.streamId === stream.id
+                    ? { ...item, status: 'processing' as const, startTime: Date.now() }
+                    : item
+                );
+                return { launchProgress: { ...s.launchProgress, items } };
+              });
+
+              try {
+                await applyChanges(stream.id);
+                // Mark as success
+                set((s) => {
+                  if (!s.launchProgress) return s;
+                  const items = s.launchProgress.items.map((item) =>
+                    item.streamId === stream.id
+                      ? { ...item, status: 'success' as const, endTime: Date.now() }
+                      : item
+                  );
+                  const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                  return { launchProgress: { ...s.launchProgress, items, completedCount } };
+                });
+              } catch {
+                // Mark as error
+                set((s) => {
+                  if (!s.launchProgress) return s;
+                  const items = s.launchProgress.items.map((item) =>
+                    item.streamId === stream.id
+                      ? { ...item, status: 'error' as const, error: 'Apply failed', endTime: Date.now() }
+                      : item
+                  );
+                  const completedCount = items.filter((item) => item.status === 'success' || item.status === 'error').length;
+                  return { launchProgress: { ...s.launchProgress, items, completedCount } };
+                });
+              }
+            });
+            await Promise.all(batchPromises);
+          }
+
+          // Mark complete, keep visible until dismissed
+          set((s) => ({
+            launchingStreamIds: new Set(),
+            launchProgress: s.launchProgress ? { ...s.launchProgress, isActive: false } : null,
+          }));
+          return;
+        }
+
+        // Default: apply all in parallel without progress
         await Promise.all(stagedStreams.map((s) => applyChanges(s.id)));
       },
 
       adjustSpreadBid: (delta) => {
         const filteredStreams = get().getFilteredStreamSets();
+        const targetIds = filteredStreams.map((fs) => fs.id);
         set((state) => ({
           streamSets: state.streamSets.map((ss) => {
             if (!filteredStreams.find((fs) => fs.id === ss.id)) return ss;
@@ -1498,10 +1707,13 @@ export const useStreamStore = create<StreamStore>()(
             };
           }),
         }));
+        clearTimeout(batchRevertTimer);
+        batchRevertTimer = setTimeout(() => batchCheckStagingRevert(targetIds), REVERT_DEBOUNCE_MS);
       },
 
       adjustSpreadAsk: (delta) => {
         const filteredStreams = get().getFilteredStreamSets();
+        const targetIds = filteredStreams.map((fs) => fs.id);
         set((state) => ({
           streamSets: state.streamSets.map((ss) => {
             if (!filteredStreams.find((fs) => fs.id === ss.id)) return ss;
@@ -1518,6 +1730,8 @@ export const useStreamStore = create<StreamStore>()(
             };
           }),
         }));
+        clearTimeout(batchRevertTimer);
+        batchRevertTimer = setTimeout(() => batchCheckStagingRevert(targetIds), REVERT_DEBOUNCE_MS);
       },
 
       // Type-scoped batch spread adjustments (for column header popovers)

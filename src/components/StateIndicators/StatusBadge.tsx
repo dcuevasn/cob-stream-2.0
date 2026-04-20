@@ -74,6 +74,10 @@ interface SidedStatusBadgeProps {
   haltDetails?: string;
   bidActiveCount: number;
   askActiveCount: number;
+  /** Whether the bid side is flagged as active (listening), even if no levels are currently active */
+  bidSideActive?: boolean;
+  /** Whether the ask side is flagged as active (listening), even if no levels are currently active */
+  askSideActive?: boolean;
   isLoading?: boolean;
   className?: string;
 }
@@ -84,6 +88,8 @@ export function SidedStatusBadge({
   haltDetails,
   bidActiveCount,
   askActiveCount,
+  bidSideActive = false,
+  askSideActive = false,
   isLoading = false,
   className,
 }: SidedStatusBadgeProps) {
@@ -124,24 +130,31 @@ export function SidedStatusBadge({
   // Running states (staging / active / paused / alert-halt): show two side dots
   const bidActive = bidActiveCount > 0;
   const askActive = askActiveCount > 0;
+  // Idle/listening: side is active but all levels consumed — show color without pulse
+  const bidIdle = !bidActive && bidSideActive;
+  const askIdle = !askActive && askSideActive;
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
-      {/* BID dot — green when active */}
+      {/* BID dot — green when active, dimmed green when idle/listening, gray when off */}
       <span
         className={cn(
           'w-2 h-2 rounded-full',
           bidActive
             ? 'bg-[var(--status-bid-active)] pulse-active'
+            : bidIdle
+            ? 'bg-[var(--status-bid-active)] opacity-40'
             : 'bg-[var(--status-paused)] opacity-40'
         )}
       />
-      {/* ASK dot — red when active */}
+      {/* ASK dot — red when active, dimmed red when idle/listening, gray when off */}
       <span
         className={cn(
           'w-2 h-2 rounded-full',
           askActive
             ? 'bg-[var(--status-ask-active)] pulse-active'
+            : askIdle
+            ? 'bg-[var(--status-ask-active)] opacity-40'
             : 'bg-[var(--status-paused)] opacity-40'
         )}
       />
