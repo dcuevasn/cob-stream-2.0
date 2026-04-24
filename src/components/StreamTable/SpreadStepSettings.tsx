@@ -4,13 +4,17 @@ import { Popover, PopoverTrigger, PopoverContent } from '../dsc/popover';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { Button } from '../dsc/button';
 import { StepperInput } from '../dsc/stepper-input';
+import { Kbd } from '../ui/kbd';
 import { cn } from '../../lib/utils';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
+import { useQuickWidenBps } from '../../hooks/useQuickWidenBps';
 
 const ARROW_STEP = 0.05;
 const MIN_STEP = 0.001;
 const MAX_STEP = 10;
+
+const QUICK_ARROW_STEP = 0.5;
 
 /**
  * Nested popover for configuring spread control settings:
@@ -20,8 +24,10 @@ const MAX_STEP = 10;
 export function SpreadStepSettings() {
   const { stepSize, updateStepSize } = useSpreadStepSize();
   const { defaultSpreads, updateDefaultSpreads } = useDefaultSpreads();
+  const { quickWidenBps, updateQuickWidenBps, MIN_BPS: MIN_QUICK, MAX_BPS: MAX_QUICK } = useQuickWidenBps();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [quickWidenInput, setQuickWidenInput] = useState('');
   const [bidSpreadValues, setBidSpreadValues] = useState<string[]>([]);
   const [askSpreadValues, setAskSpreadValues] = useState<string[]>([]);
   const [defaultSpreadsExpanded, setDefaultSpreadsExpanded] = useState(true);
@@ -29,6 +35,7 @@ export function SpreadStepSettings() {
   const handleOpen = (nextOpen: boolean) => {
     if (nextOpen) {
       setInputValue(formatStep(stepSize));
+      setQuickWidenInput(formatStep(quickWidenBps));
       setBidSpreadValues(defaultSpreads.bid.map((v) => formatSpread(v)));
       setAskSpreadValues(defaultSpreads.ask.map((v) => formatSpread(v)));
       setDefaultSpreadsExpanded(false);
@@ -62,6 +69,32 @@ export function SpreadStepSettings() {
     }
   };
 
+  const handleQuickWidenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw !== '' && raw !== '.' && !/^\d*\.?\d{0,3}$/.test(raw)) return;
+    setQuickWidenInput(raw);
+  };
+
+  const handleQuickWidenIncrement = () => {
+    const current = parseFloat(quickWidenInput) || 0;
+    const next = Math.min(MAX_QUICK, Math.round((current + QUICK_ARROW_STEP) * 1000) / 1000);
+    setQuickWidenInput(formatStep(next));
+  };
+
+  const handleQuickWidenDecrement = () => {
+    const current = parseFloat(quickWidenInput) || 0;
+    const next = Math.max(MIN_QUICK, Math.round((current - QUICK_ARROW_STEP) * 1000) / 1000);
+    setQuickWidenInput(formatStep(next));
+  };
+
+  const handleQuickWidenBlur = () => {
+    const n = parseFloat(quickWidenInput);
+    if (!isNaN(n)) {
+      const clamped = Math.min(MAX_QUICK, Math.max(MIN_QUICK, Math.round(n * 1000) / 1000));
+      setQuickWidenInput(formatStep(clamped));
+    }
+  };
+
   const handleBidSpreadChange = (index: number, value: string) => {
     const newValues = [...bidSpreadValues];
     newValues[index] = value;
@@ -77,13 +110,16 @@ export function SpreadStepSettings() {
   const handleSave = () => {
     const parsed = parseFloat(inputValue);
     const stepValid = !isNaN(parsed) && parsed >= MIN_STEP && parsed <= MAX_STEP;
+    const parsedQuick = parseFloat(quickWidenInput);
+    const quickValid = !isNaN(parsedQuick) && parsedQuick >= MIN_QUICK && parsedQuick <= MAX_QUICK;
     const bidSpreads = bidSpreadValues.map((v) => parseFloat(v));
     const askSpreads = askSpreadValues.map((v) => parseFloat(v));
     const bidSpreadsValid = bidSpreads.every((v) => !isNaN(v));
     const askSpreadsValid = askSpreads.every((v) => !isNaN(v));
 
-    if (stepValid && bidSpreadsValid && askSpreadsValid) {
+    if (stepValid && quickValid && bidSpreadsValid && askSpreadsValid) {
       updateStepSize(parsed);
+      updateQuickWidenBps(parsedQuick);
       updateDefaultSpreads(bidSpreads, askSpreads);
       setOpen(false);
     }
@@ -98,11 +134,13 @@ export function SpreadStepSettings() {
 
   const parsed = parseFloat(inputValue);
   const stepValid = !isNaN(parsed) && parsed >= MIN_STEP && parsed <= MAX_STEP;
+  const parsedQuick = parseFloat(quickWidenInput);
+  const quickValid = !isNaN(parsedQuick) && parsedQuick >= MIN_QUICK && parsedQuick <= MAX_QUICK;
   const bidSpreads = bidSpreadValues.map((v) => parseFloat(v));
   const askSpreads = askSpreadValues.map((v) => parseFloat(v));
   const bidSpreadsValid = bidSpreads.every((v) => !isNaN(v));
   const askSpreadsValid = askSpreads.every((v) => !isNaN(v));
-  const isValid = stepValid && bidSpreadsValid && askSpreadsValid;
+  const isValid = stepValid && quickValid && bidSpreadsValid && askSpreadsValid;
 
   return (
     <Popover open={open} onOpenChange={handleOpen}>
@@ -184,6 +222,51 @@ export function SpreadStepSettings() {
                   incrementLabel="Increase step size"
                   decrementLabel="Decrease step size"
                   className={cn(!stepValid && inputValue !== '' && 'border-red-500/60')}
+                />
+              </div>
+            </div>
+
+            {/* Section: Quick widen (Shift+X) */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-[6px]">
+                <span className="text-[10.5px] font-medium text-[#a1a1a1] leading-[9px]">
+                  Quick widen
+                </span>
+                <Kbd className="!h-[17px] !px-[8px] rounded-[4px] text-[10px] leading-none">
+                  Shift + X
+                </Kbd>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center size-3 text-[#a1a1a1] hover:text-[#fafafa] transition-colors"
+                      aria-label="Quick widen info"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Info className="size-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={4} className="max-w-[220px] text-xs">
+                    Amount of <strong>bps</strong> added to bid &amp; ask (mirrored) when
+                    pressing <strong>Shift + X</strong>. Opens the batch spread modal pre-filled,
+                    ready to apply.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] font-medium text-[#a1a1a1] shrink-0">BPS</span>
+                <StepperInput
+                  value={quickWidenInput}
+                  onChange={handleQuickWidenChange}
+                  onBlur={handleQuickWidenBlur}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onKeyDown={handleKeyDown}
+                  onIncrement={handleQuickWidenIncrement}
+                  onDecrement={handleQuickWidenDecrement}
+                  incrementLabel="Increase quick widen bps"
+                  decrementLabel="Decrease quick widen bps"
+                  className={cn(!quickValid && quickWidenInput !== '' && 'border-red-500/60')}
                 />
               </div>
             </div>

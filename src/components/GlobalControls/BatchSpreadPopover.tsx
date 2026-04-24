@@ -6,9 +6,11 @@ import { Checkbox } from '../dsc/checkbox';
 import { Slider } from '../dsc/slider';
 import { StepperInput } from '../dsc/stepper-input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { Kbd, KbdGroup } from '../ui/kbd';
 import { useStreamStore } from '../../hooks/useStreamStore';
 import { useSpreadStepSize } from '../../hooks/useSpreadStepSize';
 import { useDefaultSpreads } from '../../hooks/useDefaultSpreads';
+import { useQuickWidenBps } from '../../hooks/useQuickWidenBps';
 import { SpreadStepSettings } from '../StreamTable/SpreadStepSettings';
 const DEFAULT_SLIDER_RANGE = 10;
 
@@ -41,10 +43,20 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
   const [bidInputStr, setBidInputStr] = useState('0');
   const [askInputStr, setAskInputStr] = useState('0');
   const [isApplying, setIsApplying] = useState(false);
+  // True after the Shift+X shortcut fires, to hint that Enter will commit.
+  // Clears as soon as the popover closes.
+  const [enterHint, setEnterHint] = useState(false);
 
   // Track last committed values to compute incremental diffs for additive store actions
   const committedBid = useRef(0);
   const committedAsk = useRef(0);
+
+  // Set by the Shift+X shortcut; picked up by an effect after the popover opens
+  // so the value survives the open-reset effect.
+  const pendingShortcutRef = useRef<number | null>(null);
+
+  // Holds the latest handleApply so the global Enter listener always calls the current closure.
+  const handleApplyRef = useRef<() => void>(() => {});
 
   const adjustSpreadBid = useStreamStore((s) => s.adjustSpreadBid);
   const adjustSpreadAsk = useStreamStore((s) => s.adjustSpreadAsk);
@@ -66,6 +78,7 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
 
   const { stepSize } = useSpreadStepSize();
   const { defaultSpreads } = useDefaultSpreads();
+  const { quickWidenBps } = useQuickWidenBps();
 
   const scopedStream = useMemo(
     () => (streamId ? streamSets.find((s) => s.id === streamId) : null),
@@ -117,6 +130,11 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
     const maxAbs = Math.max(DEFAULT_SLIDER_RANGE, Math.abs(bidDelta), Math.abs(askDelta));
     return { min: -maxAbs, max: maxAbs };
   }, [bidDelta, askDelta]);
+
+  // Clear the Enter-hint once the popover is closed.
+  useEffect(() => {
+    if (!open) setEnterHint(false);
+  }, [open]);
 
   // On open, reset session state only when there are no staged changes.
   // Preserving state when staging is live lets the user close/reopen the popover
@@ -170,6 +188,18 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
     setAskInputStr(formatInputBps(v));
     pushAskToStore(v);
   }, [pushAskToStore]);
+
+  // After open-reset runs, apply any value queued by the Shift+X shortcut
+  // (so it isn't clobbered by the reset-to-zero effect above).
+  useEffect(() => {
+    if (!open) return;
+    const pending = pendingShortcutRef.current;
+    if (pending === null) return;
+    pendingShortcutRef.current = null;
+    applyBidDelta(pending);
+    applyAskDelta(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Snap to zero when the slider value is within half a step of 0
   const snapToZero = useCallback((v: number) => Math.abs(v) < stepSize / 2 ? 0 : v, [stepSize]);
@@ -279,6 +309,8 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
     setOpen(false);
   }, [canApply, isApplying, isScoped, streamId, applyChanges, batchApplyChanges, resetDeltaState]);
 
+  handleApplyRef.current = handleApply;
+
   const handleCancel = useCallback(() => {
     if (isScoped && streamId) revertStagingChanges(streamId);
     else batchRevertStagingChanges();
@@ -314,6 +346,57 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
     committedBid.current = 0;
     committedAsk.current = 0;
   }, [affectedCount, isScoped, scopedStream, defaultSpreads, updateStreamSet, resetSpreadsForType]);
+
+  // Global Shift+X shortcut: open batch popover with +5 bps mirrored,
+  // ready for user to confirm with Enter or click.
+  useEffect(() => {
+    if (isScoped) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.key.toLowerCase() !== 'x') return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (!mirror) setPreferences({ batchSpreadMirror: true });
+      setEnterHint(true);
+      if (open) {
+        applyBidDelta(quickWidenBps);
+        applyAskDelta(quickWidenBps);
+      } else {
+        pendingShortcutRef.current = quickWidenBps;
+        setOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isScoped, open, mirror, quickWidenBps, setPreferences, applyBidDelta, applyAskDelta]);
+
+  // While the popover is open, Enter (outside inputs) commits the changes.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      handleApplyRef.current();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open]);
 
   // Dynamic range color: green for widen (+), amber for narrow (-), neutral for 0
   const bidRangeClass =
@@ -494,18 +577,45 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
           </div>
 
           {/* Mirror checkbox */}
-          <div className="flex items-center gap-[6px] pt-[2px]">
-            <Checkbox
-              id="batch-spread-mirror"
-              checked={mirror}
-              onCheckedChange={handleMirrorChange}
-            />
-            <label
-              htmlFor="batch-spread-mirror"
-              className="text-[9px] font-medium text-[#a1a1a1] cursor-pointer select-none"
-            >
-              Mirror Bid → Ask
-            </label>
+          <div className="flex items-center justify-between gap-[6px] pt-[2px]">
+            <div className="flex items-center gap-[6px]">
+              <Checkbox
+                id="batch-spread-mirror"
+                checked={mirror}
+                onCheckedChange={handleMirrorChange}
+              />
+              <label
+                htmlFor="batch-spread-mirror"
+                className="text-[9px] font-medium text-[#a1a1a1] cursor-pointer select-none"
+              >
+                Mirror Bid → Ask
+              </label>
+            </div>
+            {!isScoped && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-[4px]">
+                    <span className="text-[9px] font-medium text-[#a1a1a1]">
+                      Quick widen
+                    </span>
+                    <KbdGroup>
+                      <Kbd className="h-[18px] min-w-[18px] rounded-[4px] px-[5px] text-[10px] leading-none">
+                        ⇧
+                      </Kbd>
+                      <Kbd className="h-[18px] min-w-[18px] rounded-[4px] px-[5px] text-[10px] leading-none">
+                        X
+                      </Kbd>
+                    </KbdGroup>
+                    <span className="text-[9px] font-medium text-[#606060] tabular-nums">
+                      +{quickWidenBps} bps
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Shift + X — widen bid &amp; ask by {quickWidenBps} bps (mirrored)
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
 
           {/* Divider */}
@@ -541,7 +651,18 @@ export function BatchSpreadPopover({ streamId }: BatchSpreadPopoverProps = {}) {
                 disabled={!canApply || isApplying}
                 style={{ paddingLeft: '8px', paddingRight: '8px' }}
               >
-                {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply changes'}
+                {isApplying ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <span className="inline-flex items-center gap-[6px]">
+                    Apply changes
+                    {enterHint && canApply && (
+                      <Kbd className="!h-[13px] !min-w-0 !px-[3px] rounded-[3px] text-[8px] leading-none bg-white/20 text-white">
+                        ↵
+                      </Kbd>
+                    )}
+                  </span>
+                )}
               </DSCButton>
             </div>
           </div>
